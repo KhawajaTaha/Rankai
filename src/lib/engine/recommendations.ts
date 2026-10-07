@@ -51,6 +51,9 @@ export async function proposeAction(a: StructuredAction, actor: Actor = AI_ACTOR
   const existing = await db.aiRecommendation.findUnique({ where: { clientId_dedupeKey: { clientId: a.clientId, dedupeKey } } });
   if (existing && ["NEEDS_APPROVAL", "APPROVED", "SCHEDULED", "EXECUTING"].includes(existing.status)) return existing;
   if (existing && existing.status === "REJECTED" && existing.updatedAt > addDays(new Date(), -30)) return existing; // respect human rejection for 30 days
+  if (existing && ["EXECUTED", "VERIFIED"].includes(existing.status) && existing.executedAt && existing.executedAt > addDays(new Date(), -(client.automation?.observationDays ?? client.organization.observationDays))) {
+    return existing; // already done recently — observe results instead of re-editing (spec §54-55)
+  }
 
   const observationDays = client.automation?.observationDays ?? client.organization.observationDays;
   const cd = await cooldownUntil(a.clientId, a.target, observationDays);

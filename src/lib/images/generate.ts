@@ -32,7 +32,8 @@ export async function selectOrGenerateImage(args: {
   if (args.mode === "OFF") return { media: null, source: "NONE", needsApproval: false, notes: [...notes, "AI images are OFF for this content type"] };
   if (!args.consentAiImages) return { media: null, source: "NONE", needsApproval: false, notes: [...notes, "Client has not consented to AI-generated images"] };
   const media = await generateAiImage({ ...args });
-  const needsApproval = args.mode !== "AUTO_USE" || !media.approvedForGbp;
+  const approvedForPurpose = args.purpose === "GBP_POST" ? media.approvedForGbp : args.purpose === "BLOG" ? media.approvedForBlog : media.status === "APPROVED";
+  const needsApproval = args.mode !== "AUTO_USE" || !approvedForPurpose;
   return { media, source: "AI", needsApproval, notes: [...notes, "Generated AI image"] };
 }
 
@@ -81,8 +82,8 @@ export async function generateAiImage(args: { organizationId: string; clientId: 
     data = Buffer.from(demoSvg({ seed: `${args.clientId}:${concept}:${Date.now()}`, w, h, primary: brand?.primaryColor ?? "#1f48f5", secondary: brand?.secondaryColor ?? "#0f172a", accent: brand?.accentColor ?? "#f59e0b", label: concept }));
     ext = "svg";
   }
-  // Quality + brand checks (dimension sanity, size, safety outcome).
-  const qualityScore = data.length > 2_000 ? 0.9 : 0.5;
+  // Quality + brand checks: valid image payload of a sensible size, plus the safety outcome.
+  const qualityScore = imageQuality(data, ext);
   const safetyNotes = screen.allowed ? [] : [`Concept rewritten: ${screen.issues.join(", ")}`];
   const saved = await saveFile(args.organizationId, args.clientId, `ai-${args.purpose.toLowerCase()}.${ext}`, data);
   const autoUse = args.mode === "AUTO_USE" && screen.allowed && qualityScore >= 0.7;
@@ -122,6 +123,14 @@ export async function generateAiImage(args: { organizationId: string; clientId: 
     },
   });
   return media;
+}
+
+function imageQuality(data: Buffer, ext: string) {
+  if (ext === "svg") return data.toString("utf8", 0, 200).includes("<svg") && data.length > 500 ? 0.9 : 0.3;
+  const png = data.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  const jpg = data[0] === 0xff && data[1] === 0xd8;
+  if (!png && !jpg) return 0.2;
+  return data.length > 50_000 ? 0.92 : 0.6; // tiny raster output usually means a failed/blank generation
 }
 
 async function openAiImage(prompt: string, w: number, h: number): Promise<Buffer> {

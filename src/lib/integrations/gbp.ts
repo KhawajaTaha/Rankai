@@ -357,7 +357,8 @@ class DemoGbp implements GbpProvider {
       const key = `${locationName}:${isoDate(date)}`;
       const r = seeded(key);
       if (r() > 0.12) continue;
-      const rating = r() < 0.08 ? 1 : r() < 0.12 ? 2 : r() < 0.2 ? 3 : r() < 0.4 ? 4 : 5;
+      const roll = r();
+      const rating = roll < 0.04 ? 1 : roll < 0.06 ? 2 : roll < 0.11 ? 3 : roll < 0.3 ? 4 : 5;
       const service = b.services[Math.floor(r() * b.services.length)]!.toLowerCase();
       const pool = rating <= 2 ? NEGATIVE : POSITIVE;
       out.push({

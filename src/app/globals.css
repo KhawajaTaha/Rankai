@@ -1,0 +1,42 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #f6f7fb;
+  --card: #ffffff;
+  --border: #e6e8ef;
+  --text: #151821;
+  --muted: #677084;
+}
+
+html, body { background: var(--bg); color: var(--text); }
+body { font-feature-settings: "cv02", "cv03", "cv04", "cv11"; -webkit-font-smoothing: antialiased; }
+
+@layer components {
+  .card { @apply rounded-2xl border border-ink-200/80 bg-white shadow-card; }
+  .card-pad { @apply p-5; }
+  .btn { @apply inline-flex items-center justify-center gap-2 rounded-xl px-3.5 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 disabled:cursor-not-allowed disabled:opacity-50 whitespace-nowrap; }
+  .btn-primary { @apply btn bg-brand-600 text-white hover:bg-brand-700 shadow-sm; }
+  .btn-secondary { @apply btn border border-ink-200 bg-white text-ink-800 hover:bg-ink-50; }
+  .btn-ghost { @apply btn text-ink-600 hover:bg-ink-100 hover:text-ink-900; }
+  .btn-danger { @apply btn bg-red-600 text-white hover:bg-red-700; }
+  .btn-sm { @apply px-2.5 py-1.5 text-xs rounded-lg; }
+  .input { @apply w-full rounded-xl border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 placeholder:text-ink-400 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100; }
+  .label { @apply mb-1.5 block text-xs font-medium text-ink-600; }
+  .th { @apply px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-500; }
+  .td { @apply px-4 py-3 text-sm text-ink-700 align-middle; }
+  .tr { @apply border-t border-ink-100 hover:bg-ink-50/60; }
+  .link { @apply text-brand-700 hover:text-brand-800 hover:underline; }
+  .kbd { @apply rounded border border-ink-200 bg-ink-50 px-1.5 py-0.5 text-[10px] font-medium text-ink-500; }
+  .skeleton { @apply animate-pulse rounded-lg bg-ink-100; }
+}
+
+.prose-sm h1 { font-size: 1.25rem; font-weight: 700; margin: 0.75rem 0 0.5rem; }
+.prose-sm h2 { font-size: 1.05rem; font-weight: 650; margin: 1rem 0 0.4rem; }
+.prose-sm h3 { font-size: 0.95rem; font-weight: 600; margin: 0.8rem 0 0.3rem; }
+.prose-sm p { margin: 0.4rem 0; line-height: 1.6; }
+.prose-sm ul { list-style: disc; padding-left: 1.25rem; margin: 0.4rem 0; }
+.prose-sm strong { font-weight: 600; }
+
+dialog::backdrop { background: rgba(21, 24, 33, 0.45); backdrop-filter: blur(2px); }

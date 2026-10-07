@@ -21,7 +21,15 @@ export async function hashPassword(pw: string) {
   return bcrypt.hash(pw, 12);
 }
 
-export async function verifyPassword(pw: string, hash: string) {
+let dummyHash: string | null = null;
+
+/** Compares a password; with no hash it still burns a bcrypt round so timing doesn't reveal unknown emails. */
+export async function verifyPassword(pw: string, hash: string | null | undefined) {
+  if (!hash) {
+    dummyHash ??= await bcrypt.hash("timing-equaliser", 12);
+    await bcrypt.compare(pw, dummyHash);
+    return false;
+  }
   return bcrypt.compare(pw, hash);
 }
 
