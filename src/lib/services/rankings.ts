@@ -5,7 +5,7 @@ import { checkRank, runGrid } from "../integrations/serp";
 import { proposeAction } from "../engine/recommendations";
 import { raiseAlert } from "../notify";
 import { createTask } from "../tasks";
-import { seeded, titleCase } from "../utils";
+import { seeded, startOfDay, titleCase } from "../utils";
 
 /** Keyword rank checks + significant-drop detection (spec §39, §51). */
 export async function checkClientRanks(clientId: string) {
@@ -15,12 +15,18 @@ export async function checkClientRanks(clientId: string) {
   let drops = 0;
   for (const k of client.keywords) {
     const r = await checkRank({ keyword: k.phrase, location: k.location ?? client.city ?? "Canada", domain, seed: k.id });
-    await db.rankHistory.create({ data: { organizationId: client.organizationId, clientId, keywordId: k.id, position: r.position, localPosition: r.localPosition, url: r.url, source: r.source } });
+    // One history point per day; "previous" is always the last check from an earlier day.
+    const today = startOfDay();
+    const todays = await db.rankHistory.findFirst({ where: { keywordId: k.id, checkedAt: { gte: today } } });
+    if (todays) await db.rankHistory.update({ where: { id: todays.id }, data: { position: r.position, localPosition: r.localPosition, url: r.url, source: r.source, checkedAt: new Date() } });
+    else await db.rankHistory.create({ data: { organizationId: client.organizationId, clientId, keywordId: k.id, position: r.position, localPosition: r.localPosition, url: r.url, source: r.source } });
+    const prior = await db.rankHistory.findFirst({ where: { keywordId: k.id, checkedAt: { lt: today } }, orderBy: { checkedAt: "desc" } });
+    const previous = prior?.position ?? k.previousPosition;
     const best = r.position != null ? Math.min(k.bestPosition ?? 999, r.position) : k.bestPosition;
-    await db.keyword.update({ where: { id: k.id }, data: { previousPosition: k.currentPosition, currentPosition: r.position, localPosition: r.localPosition, bestPosition: best, lastCheckedAt: new Date(), searchVolume: k.searchVolume ?? Math.round(50 + seeded(k.phrase)() * 900) } });
-    if (k.currentPosition != null && r.position != null && r.position - k.currentPosition >= 5) {
+    await db.keyword.update({ where: { id: k.id }, data: { previousPosition: previous, currentPosition: r.position, localPosition: r.localPosition, bestPosition: best, lastCheckedAt: new Date(), searchVolume: k.searchVolume ?? Math.round(50 + seeded(k.phrase)() * 900) } });
+    if (previous != null && r.position != null && r.position - previous >= 5) {
       drops++;
-      await createTask({ organizationId: client.organizationId, clientId, title: `Investigate ranking drop: "${k.phrase}" ${k.currentPosition} → ${r.position}`, category: "Rankings", priority: r.position - k.currentPosition >= 10 ? "HIGH" : "NORMAL", source: "AUTOMATION", dedupeKey: `rankdrop:${k.id}` });
+      await createTask({ organizationId: client.organizationId, clientId, title: `Investigate ranking drop: "${k.phrase}" ${previous} → ${r.position}`, category: "Rankings", priority: r.position - previous >= 10 ? "HIGH" : "NORMAL", source: "AUTOMATION", dedupeKey: `rankdrop:${k.id}` });
     }
   }
   if (drops >= 3) {

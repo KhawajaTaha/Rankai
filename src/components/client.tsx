@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState, useTransition } from "react";
+import { createContext, useActionState, useContext, useEffect, useRef, useState, useTransition } from "react";
 import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, CircleAlert, Loader2, X } from "lucide-react";
@@ -8,6 +8,8 @@ import { cn } from "@/lib/utils";
 
 export type ActionResult = { ok: boolean; message?: string; error?: string; redirect?: string } | null;
 export type FormAction = (prev: ActionResult, formData: FormData) => Promise<ActionResult>;
+
+const DialogCtx = createContext<{ close: () => void } | null>(null);
 
 export function SubmitButton({ children, className = "btn-primary", pendingText, name, value }: { children: React.ReactNode; className?: string; pendingText?: string; name?: string; value?: string }) {
   const { pending } = useFormStatus();
@@ -24,11 +26,13 @@ export function ActionForm({ action, children, className, resetOnSuccess = true,
   const [state, formAction] = useActionState(action, null);
   const ref = useRef<HTMLFormElement>(null);
   const router = useRouter();
+  const dialog = useContext(DialogCtx);
   useEffect(() => {
     if (!state) return;
     if (state.ok) {
       if (resetOnSuccess) ref.current?.reset();
       onSuccess?.();
+      if (!onSuccess && dialog) setTimeout(dialog.close, 600);
       if (state.redirect) router.push(state.redirect);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -47,7 +51,7 @@ export function ActionForm({ action, children, className, resetOnSuccess = true,
 }
 
 /** Modal dialog (native <dialog>) with a trigger button. */
-export function Dialog({ trigger, title, description, children, triggerClassName = "btn-secondary", wide }: { trigger: React.ReactNode; title: string; description?: string; children: (close: () => void) => React.ReactNode; triggerClassName?: string; wide?: boolean }) {
+export function Dialog({ trigger, title, description, children, triggerClassName = "btn-secondary", wide }: { trigger: React.ReactNode; title: string; description?: string; children: React.ReactNode | ((close: () => void) => React.ReactNode); triggerClassName?: string; wide?: boolean }) {
   const ref = useRef<HTMLDialogElement>(null);
   const [open, setOpen] = useState(false);
   const close = () => {
@@ -67,7 +71,7 @@ export function Dialog({ trigger, title, description, children, triggerClassName
           </div>
           <button type="button" onClick={close} className="btn-ghost btn-sm" aria-label="Close"><X className="h-4 w-4" /></button>
         </div>
-        <div className="max-h-[75vh] overflow-y-auto px-5 py-4">{open && children(close)}</div>
+        <div className="max-h-[75vh] overflow-y-auto px-5 py-4"><DialogCtx.Provider value={{ close }}>{open && (typeof children === "function" ? children(close) : children)}</DialogCtx.Provider></div>
       </dialog>
     </>
   );
