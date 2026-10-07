@@ -14,17 +14,19 @@ import { cn } from "@/lib/utils";
 export const metadata = { title: "Approval Center" };
 const CATS: ApprovalCategory[] = ["GBP", "WEBSITE", "CONTENT", "REVIEWS", "IMAGES", "TECHNICAL"];
 
-export default async function ApprovalsPage({ searchParams }: { searchParams: Promise<{ category?: string; client?: string; risk?: string }> }) {
+export default async function ApprovalsPage({ searchParams }: { searchParams: Promise<{ category?: string; client?: string; risk?: string; page?: string }> }) {
   const ctx = await requireStaff();
   if (!ctx.can("approve_content") && !ctx.can("view_all_clients")) redirect("/dashboard");
   const sp = await searchParams;
+  const page = Math.max(0, Number(sp.page ?? 0) || 0);
+  const PER = 15;
   const scope = await clientScopeFilter(ctx);
   const where: Prisma.ApprovalWhereInput = { ...scope, status: "PENDING" };
   if (sp.category && CATS.includes(sp.category as ApprovalCategory)) where.category = sp.category as ApprovalCategory;
   if (sp.client) where.clientId = sp.client;
   if (sp.risk) where.risk = sp.risk as "LOW";
   const [approvals, counts, clients] = await Promise.all([
-    db.approval.findMany({ where, orderBy: [{ risk: "desc" }, { createdAt: "asc" }], take: 60, include: { client: { select: { name: true } }, recommendation: { select: { sourceSignals: true, action: true } } } }),
+    db.approval.findMany({ where, orderBy: [{ risk: "desc" }, { createdAt: "asc" }], take: PER, skip: page * PER, include: { client: { select: { name: true } }, recommendation: { select: { sourceSignals: true, action: true } } } }),
     db.approval.groupBy({ by: ["category"], where: { ...scope, status: "PENDING", ...(sp.client ? { clientId: sp.client } : {}) }, _count: true }),
     db.client.findMany({ where: clientWhere(ctx), select: { id: true, name: true }, orderBy: { name: "asc" } }),
   ]);
@@ -45,6 +47,13 @@ export default async function ApprovalsPage({ searchParams }: { searchParams: Pr
       </div>
       <div className="space-y-4">
         {approvals.map((a) => <ApprovalCard key={a.id} a={a} clientName={a.client.name} canDecide={ctx.can("approve_content")} />)}
+        {(page > 0 || approvals.length === PER) && (
+          <div className="flex items-center justify-between text-sm">
+            {page > 0 ? <Link className="link" href={q({ ...(sp.category ? { category: sp.category } : {}), ...(sp.risk ? { risk: sp.risk } : {}), page: String(page - 1) })}>← Previous</Link> : <span />}
+            <span className="text-xs text-ink-500">Page {page + 1} of {Math.max(1, Math.ceil((sp.category ? counts.find((x) => x.category === sp.category)?._count ?? 0 : total) / PER))}</span>
+            {approvals.length === PER ? <Link className="link" href={q({ ...(sp.category ? { category: sp.category } : {}), ...(sp.risk ? { risk: sp.risk } : {}), page: String(page + 1) })}>Next →</Link> : <span />}
+          </div>
+        )}
         {!approvals.length && <Card><EmptyState icon={<CheckCircle2 className="h-5 w-5" />} title="Nothing waiting for approval" description="Safe actions are running automatically." /></Card>}
       </div>
     </>

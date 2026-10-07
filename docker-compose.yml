@@ -1,0 +1,37 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: rankai
+      POSTGRES_PASSWORD: rankai
+      POSTGRES_DB: rankai
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rankai"]
+      interval: 5s
+      retries: 10
+
+  app:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://rankai:rankai@db:5432/rankai
+      RUN_WORKER_IN_PROCESS: "false"
+    ports: ["3000:3000"]
+    volumes: [uploads:/app/uploads]
+    depends_on: { db: { condition: service_healthy } }
+    command: sh -c "npx prisma db push --skip-generate && npx next start -p 3000"
+
+  worker:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://rankai:rankai@db:5432/rankai
+    volumes: [uploads:/app/uploads]
+    depends_on: { db: { condition: service_healthy } }
+    command: npx tsx src/worker/index.ts
+    deploy: { replicas: 2 }
+
+volumes:
+  pgdata:
+  uploads:
