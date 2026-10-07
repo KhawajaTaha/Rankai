@@ -17,7 +17,7 @@ export function Topbar({ name, role, unread, items, searchAction = "/search", sh
         <div className="flex-1" />
       )}
       <div className="ml-auto flex items-center gap-1">
-        <Link href={items.find((i) => i.href.includes("notifications"))?.href ?? "/notifications"} className="btn-ghost relative h-9 w-9 p-0" aria-label="Notifications">
+        <Link href={items.find((i) => i.href.includes("notifications"))?.href ?? (showSearch ? "/notifications" : "/portal/support")} className="btn-ghost relative h-9 w-9 p-0" aria-label="Notifications">
           <Bell className="h-[18px] w-[18px]" />
           {unread > 0 && <span className="absolute right-1 top-1 min-w-[16px] rounded-full bg-red-500 px-1 text-[10px] font-semibold leading-4 text-white">{unread > 99 ? "99+" : unread}</span>}
         </Link>
