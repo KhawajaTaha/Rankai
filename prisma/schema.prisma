@@ -1,0 +1,1784 @@
+// AI Local SEO Autopilot — multi-tenant data model.
+//
+// Tenancy rules:
+//  * Every tenant-owned row carries organizationId.
+//  * Every client-scoped row also carries clientId (and locationId where a GBP location applies).
+//  * All application reads/writes go through src/lib/tenancy.ts which injects these filters;
+//    never query tenant tables without an organizationId predicate.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ───────────────────────────── Enums ─────────────────────────────
+
+enum OrgUserStatus {
+  ACTIVE
+  INVITED
+  DISABLED
+}
+
+enum ClientStatus {
+  ONBOARDING
+  ACTIVE
+  PAUSED
+  OFFBOARDING
+  ARCHIVED
+}
+
+enum OnboardingStage {
+  NEW_CLIENT
+  INFORMATION_REQUIRED
+  GBP_CONNECTION_PENDING
+  WEBSITE_CONNECTION_PENDING
+  GSC_CONNECTION_PENDING
+  GA4_CONNECTION_PENDING
+  INITIAL_AUDIT_RUNNING
+  RECOMMENDATIONS_GENERATED
+  AWAITING_APPROVAL
+  OPTIMIZATION_STARTED
+  FULLY_ACTIVE
+}
+
+enum SupportHealth {
+  HEALTHY
+  NEEDS_FOLLOW_UP
+  WAITING_FOR_CLIENT
+  SEO_ATTENTION_NEEDED
+  URGENT
+  NEW_CLIENT
+}
+
+enum AssignmentType {
+  SUPPORT
+  SEO
+  CONTENT
+  ACCOUNT_MANAGER
+}
+
+enum AutomationLevel {
+  MONITOR_ONLY
+  ASSIST
+  APPROVAL_AUTOPILOT
+  FULL_SAFE_AUTOPILOT
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum ActionClass {
+  AUTO_SAFE
+  APPROVAL_REQUIRED
+  PROTECTED
+}
+
+enum Priority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum Severity {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum TaskStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING_FOR_CLIENT
+  WAITING_FOR_APPROVAL
+  BLOCKED
+  COMPLETED
+  CANCELLED
+}
+
+enum TaskSource {
+  HUMAN
+  AI
+  AUTOMATION
+  CLIENT_REQUEST
+  SEO_AUDIT
+  SUPPORT_NOTE
+  REVIEW_ALERT
+  WATCHDOG
+  ONBOARDING
+}
+
+enum CallDirection {
+  INCOMING
+  OUTGOING
+}
+
+enum CallOutcome {
+  ANSWERED
+  NO_ANSWER
+  VOICEMAIL
+  BUSY
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING_FOR_CLIENT
+  RESOLVED
+  CLOSED
+}
+
+enum TicketType {
+  WEBSITE_CHANGE
+  GBP_CHANGE
+  NEW_SERVICE
+  CONTENT_REQUEST
+  BILLING
+  TECHNICAL_PROBLEM
+  OTHER
+}
+
+enum NoteVisibility {
+  INTERNAL
+  CLIENT_VISIBLE
+}
+
+enum ConnectionStatus {
+  CONNECTED
+  DISCONNECTED
+  ERROR
+  EXPIRED
+  PENDING
+}
+
+enum IntegrationMode {
+  LIVE
+  DEMO
+}
+
+enum IntegrationKind {
+  WEBSITE_WORDPRESS
+  WEBSITE_GENERIC
+  GOOGLE_SEARCH_CONSOLE
+  GOOGLE_ANALYTICS_4
+  SERP_PROVIDER
+  EMAIL
+}
+
+enum ContentType {
+  GBP_POST
+  BLOG
+  SOCIAL
+  WEBSITE_UPDATE
+  EMAIL
+  SEO_TASK
+  REVIEW_CAMPAIGN
+}
+
+enum ContentStatus {
+  IDEA
+  DRAFT
+  GENERATING
+  NEEDS_APPROVAL
+  APPROVED
+  SCHEDULED
+  PUBLISHING
+  PUBLISHED
+  FAILED
+  REJECTED
+  PAUSED
+}
+
+enum ReviewResponseStatus {
+  UNANSWERED
+  DRAFTED
+  NEEDS_APPROVAL
+  APPROVED
+  POSTED
+  FAILED
+  SKIPPED
+}
+
+enum Sentiment {
+  POSITIVE
+  NEUTRAL
+  NEGATIVE
+}
+
+enum RecommendationStatus {
+  PROPOSED
+  NEEDS_APPROVAL
+  APPROVED
+  SCHEDULED
+  EXECUTING
+  EXECUTED
+  VERIFIED
+  FAILED
+  REJECTED
+  DISMISSED
+  ROLLED_BACK
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CHANGES_REQUESTED
+  EXPIRED
+}
+
+enum ApprovalCategory {
+  GBP
+  WEBSITE
+  CONTENT
+  REVIEWS
+  IMAGES
+  TECHNICAL
+}
+
+enum RunStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+  RETRYING
+  NEEDS_HUMAN
+  CANCELLED
+}
+
+enum ActorType {
+  HUMAN
+  AI
+  AUTOMATION
+  SYSTEM
+  CLIENT
+}
+
+enum AlertStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+}
+
+enum ReportType {
+  WEEKLY_SUMMARY
+  MONTHLY_SEO
+  GBP
+  WEBSITE_SEO
+  RANKING
+  CONTENT
+  SUPPORT
+  EXECUTIVE
+  FINAL
+}
+
+enum ReportStatus {
+  GENERATING
+  READY
+  SENT
+  FAILED
+}
+
+enum MediaFolder {
+  LOGO
+  TEAM
+  PRODUCTS
+  SERVICES
+  PROJECTS
+  BEFORE_AFTER
+  AI_GENERATED
+  GBP
+  BLOGS
+  SOCIAL_MEDIA
+}
+
+enum MediaStatus {
+  PENDING_REVIEW
+  APPROVED
+  ARCHIVED
+  DO_NOT_USE
+}
+
+enum AiImageMode {
+  OFF
+  DRAFT_ONLY
+  REQUIRE_APPROVAL
+  AUTO_USE
+}
+
+enum ReviewAutoReply {
+  NEVER
+  APPROVAL_ALL
+  AUTO_POSITIVE
+}
+
+// ─────────────────────── Identity & access ───────────────────────
+
+model Organization {
+  id                   String   @id @default(cuid())
+  name                 String
+  slug                 String   @unique
+  logoUrl              String?
+  timezone             String   @default("America/Toronto")
+  brandColor           String   @default("#1f48f5")
+  whiteLabelName       String?
+  onboardingSlaHours   Int      @default(72)
+  observationDays      Int      @default(21) // change cooldown default
+  minAutoConfidence    Float    @default(0.8) // never auto-execute below this
+  retentionDays        Int      @default(730)
+  settings             Json     @default("{}")
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  members        OrganizationUser[]
+  roles          Role[]
+  clients        Client[]
+  packages       ServicePackage[]
+  templates      ClientTemplate[]
+  slaPolicies    SlaPolicy[]
+  googleConns    GoogleConnection[]
+  runs           AutomationRun[]
+  auditLogs      AuditLog[]
+  notifications  Notification[]
+}
+
+model User {
+  id             String    @id @default(cuid())
+  email          String    @unique
+  name           String
+  passwordHash   String
+  avatarUrl      String?
+  phone          String?
+  isSuperAdmin   Boolean   @default(false)
+  totpSecretEnc  String?   // encrypted TOTP secret (optional 2FA)
+  totpEnabled    Boolean   @default(false)
+  lastLoginAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  memberships    OrganizationUser[]
+  sessions       Session[]
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  userId       String
+  tokenHash    String   @unique
+  organizationId String?
+  ip           String?
+  userAgent    String?
+  twoFactorPending Boolean @default(false)
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  lastSeenAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// Catalog of every granular permission key the platform understands.
+model Permission {
+  key         String @id
+  group       String
+  description String
+}
+
+model Role {
+  id             String   @id @default(cuid())
+  organizationId String?  // null => system role template
+  key            String   // super_admin, agency_admin, seo_manager, ...
+  name           String
+  description    String?
+  permissions    String[]
+  isSystem       Boolean  @default(false)
+  isClientRole   Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  organization Organization?      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  members      OrganizationUser[]
+
+  @@unique([organizationId, key])
+}
+
+model OrganizationUser {
+  id                  String        @id @default(cuid())
+  organizationId      String
+  userId              String
+  roleId              String
+  status              OrgUserStatus @default(ACTIVE)
+  title               String?
+  // Client-portal users are pinned to a single client.
+  clientId            String?
+  // Granular overrides on top of the role's permissions.
+  grantedPermissions  String[]      @default([])
+  revokedPermissions  String[]      @default([])
+  dashboardLayout     Json?
+  managerId           String?
+  createdAt           DateTime      @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role         Role         @relation(fields: [roleId], references: [id])
+  client       Client?      @relation("ClientPortalUsers", fields: [clientId], references: [id], onDelete: Cascade)
+  assignments  ClientAssignment[]
+
+  @@unique([organizationId, userId])
+  @@index([organizationId, clientId])
+}
+
+// ───────────────────── Packages / templates / SLA ─────────────────────
+
+model ServicePackage {
+  id               String   @id @default(cuid())
+  organizationId   String
+  name             String
+  description      String?
+  monthlyPrice     Int?     // cents
+  gbpPostsPerWeek  Int      @default(2)
+  blogsPerMonth    Int      @default(1)
+  rankTracking     String   @default("WEEKLY") // OFF | WEEKLY | DAILY
+  mapGrid          String   @default("OFF")    // OFF | WEEKLY | MONTHLY
+  supportCalls     Boolean  @default(true)
+  websiteAutomation Boolean @default(false)
+  reports          String   @default("MONTHLY") // OFF | WEEKLY | MONTHLY | BOTH
+  reviewAutomation Boolean  @default(true)
+  features         Json     @default("{}")
+  createdAt        DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clients      Client[]
+
+  @@unique([organizationId, name])
+}
+
+model ClientTemplate {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  industry       String?
+  description    String?
+  automation     Json     // AutomationSetting shape defaults
+  onboardingTasks Json    @default("[]")
+  contentSafety  String?  // e.g. healthcare-safe
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, name])
+}
+
+model SlaPolicy {
+  id             String   @id @default(cuid())
+  organizationId String
+  priority       Priority
+  respondWithinHours Int
+  resolveWithinHours Int?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, priority])
+}
+
+// ───────────────────────────── Clients ─────────────────────────────
+
+model Client {
+  id               String          @id @default(cuid())
+  organizationId   String
+  name             String
+  slug             String
+  logoUrl          String?
+  industry         String?
+  phone            String?
+  email            String?
+  website          String?
+  address          String?
+  city             String?
+  region           String?
+  country          String?         @default("CA")
+  postalCode       String?
+  latitude         Float?
+  longitude        Float?
+  timezone         String?
+  status           ClientStatus    @default(ONBOARDING)
+  onboardingStage  OnboardingStage @default(NEW_CLIENT)
+  supportHealth    SupportHealth   @default(NEW_CLIENT)
+  healthScore      Int?
+  seoScore         Int?
+  gbpScore         Int?
+  mainGoal         String?
+  websitePlatform  String?
+  hasGbp           Boolean?
+  packageId        String?
+  templateId       String?
+  automationPaused Boolean         @default(false)
+  lastContactAt    DateTime?
+  nextFollowUpAt   DateTime?
+  createdById      String?
+  archivedAt       DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  package      ServicePackage?    @relation(fields: [packageId], references: [id])
+  contacts     ClientContact[]
+  assignments  ClientAssignment[]
+  portalUsers  OrganizationUser[] @relation("ClientPortalUsers")
+  brandKit     ClientBrandKit?
+  knowledge    ClientKnowledge?
+  knowledgeEntries KnowledgeEntry[]
+  consent      ClientConsent?
+  automation   AutomationSetting?
+  locations    GbpLocation[]
+  websites     Website[]
+  tasks        Task[]
+  calls        SupportCall[]
+  notes        SupportNote[]
+  followUps    FollowUp[]
+  tickets      SupportTicket[]
+  content      ContentItem[]
+  reviews      GbpReview[]
+  keywords     Keyword[]
+  competitors  Competitor[]
+  recommendations AiRecommendation[]
+  approvals    Approval[]
+  reports      Report[]
+  media        MediaAsset[]
+  files        FileAsset[]
+  activity     ActivityLog[]
+  alerts       Alert[]
+  checklist    OnboardingChecklistItem[]
+  integrations Integration[]
+  gridRuns     LocalGridRun[]
+  strategies   WeeklyStrategy[]
+  gscMetrics   GscMetric[]
+  ga4Metrics   Ga4Metric[]
+  audits       SeoAudit[]
+
+  @@unique([organizationId, slug])
+  @@index([organizationId, status])
+}
+
+model ClientContact {
+  id             String   @id @default(cuid())
+  organizationId String
+  clientId       String
+  name           String
+  role           String?
+  email          String?
+  phone          String?
+  isPrimary      Boolean  @default(false)
+  receivesReports Boolean @default(false)
+  createdAt      DateTime @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, clientId])
+}
+
+model ClientAssignment {
+  id             String         @id @default(cuid())
+  organizationId String
+  clientId       String
+  memberId       String
+  type           AssignmentType
+  createdAt      DateTime       @default(now())
+
+  client Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  member OrganizationUser @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, memberId, type])
+  @@index([organizationId, memberId])
+}
+
+model ClientBrandKit {
+  id             String   @id @default(cuid())
+  organizationId String
+  clientId       String   @unique
+  logoUrl        String?
+  primaryColor   String   @default("#1f48f5")
+  secondaryColor String   @default("#0f172a")
+  accentColor    String   @default("#f59e0b")
+  headingFont    String   @default("Inter")
+  bodyFont       String   @default("Inter")
+  brandTone      String   @default("Professional, friendly and local")
+  imageStyle     String   @default("Photo-realistic")
+  ctaStyle       String   @default("Call now")
+  designStyle    String   @default("Clean")
+  updatedAt      DateTime @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+}
+
+/// The client's "AI Business Brain" — structured context injected into every AI action.
+model ClientKnowledge {
+  id                 String   @id @default(cuid())
+  organizationId     String
+  clientId           String   @unique
+  businessName       String
+  industry           String?
+  location           String?
+  serviceAreas       String[] @default([])
+  services           String[] @default([])
+  products           String[] @default([])
+  usp                String?
+  targetAudience     String?
+  brandTone          String?
+  importantKeywords  String[] @default([])
+  faqs               Json     @default("[]")
+  seasonalOffers     String?
+  contentPreferences String?
+  prioritizeServices String[] @default([])
+  doNotPromote       String[] @default([])
+  wordsToAvoid       String[] @default([])
+  brandGuidelines    String?
+  specialInstructions String?
+  websiteSummary     String?
+  gbpSummary         String?
+  competitorSummary  String?
+  version            Int      @default(1)
+  updatedAt          DateTime @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+}
+
+/// Individual facts that feed the brain (support notes flagged as AI context, client requests, sync discoveries).
+model KnowledgeEntry {
+  id             String   @id @default(cuid())
+  organizationId String
+  clientId       String
+  source         String   // support_note | client_request | website_sync | gbp_sync | manual | campaign
+  sourceId       String?
+  content        String
+  active         Boolean  @default(true)
+  priority       Int      @default(0)
+  expiresAt      DateTime?
+  createdById    String?
+  createdAt      DateTime @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, clientId, active])
+}
+
+model ClientConsent {
+  id                     String   @id @default(cuid())
+  organizationId         String
+  clientId               String   @unique
+  gbpAutoPosting         Boolean  @default(false)
+  aiImages               Boolean  @default(false)
+  positiveReviewReplies  Boolean  @default(false)
+  websiteMetadataChanges Boolean  @default(false)
+  internalLinking        Boolean  @default(false)
+  blogs                  Boolean  @default(false)
+  autoPublishing         Boolean  @default(false)
+  reports                Boolean  @default(true)
+  rankTracking           Boolean  @default(true)
+  gbpProfileEdits        Boolean  @default(false)
+  recordedById           String?
+  recordedAt             DateTime @default(now())
+  history                Json     @default("[]")
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+}
+
+model AutomationSetting {
+  id                 String          @id @default(cuid())
+  organizationId     String
+  clientId           String          @unique
+  level              AutomationLevel @default(APPROVAL_AUTOPILOT)
+  // GBP posting
+  gbpPostingEnabled  Boolean  @default(true)
+  postsPerWeek       Int      @default(2)
+  postDays           Int[]    @default([1, 4]) // 0=Sun
+  postTime           String   @default("10:00")
+  autoGenerateCopy   Boolean  @default(true)
+  autoGenerateImage  Boolean  @default(true)
+  autoPublishPosts   Boolean  @default(false)
+  postsRequireApproval Boolean @default(true)
+  contentCategories  String[] @default(["Service", "Educational", "Offer", "Seasonal"])
+  ctaPreference      String   @default("CALL")
+  // AI images
+  aiImagesGbp        AiImageMode @default(REQUIRE_APPROVAL)
+  aiImagesBlog       AiImageMode @default(REQUIRE_APPROVAL)
+  aiImagesSocial     AiImageMode @default(DRAFT_ONLY)
+  aiImagesReports    AiImageMode @default(OFF)
+  aiImagesWebsite    AiImageMode @default(OFF)
+  preferRealPhotos   Boolean  @default(true)
+  imageAddLogo       Boolean  @default(false)
+  imageAddText       Boolean  @default(false)
+  imageStyle         String   @default("Photo-realistic")
+  imageDimensions    String   @default("1200x900")
+  // Blogs
+  blogsEnabled       Boolean  @default(false)
+  blogsPerMonth      Int      @default(1)
+  blogRequireApproval Boolean @default(true)
+  blogAutoPublish    Boolean  @default(false)
+  blogFeaturedImage  Boolean  @default(true)
+  blogMinWords       Int      @default(900)
+  blogTone           String?
+  blogTargetServices String[] @default([])
+  blogTargetLocations String[] @default([])
+  blogDays           Int[]    @default([2])
+  // Reviews
+  reviewAutoReply    ReviewAutoReply @default(APPROVAL_ALL)
+  autoReply5         Boolean  @default(false)
+  autoReply4         Boolean  @default(false)
+  // Website
+  websiteSafeFixes   Boolean  @default(false)
+  // Tracking & reporting
+  rankTracking       String   @default("WEEKLY")
+  mapGrid            String   @default("OFF")
+  gridSize           Int      @default(5)
+  gridRadiusKm       Float    @default(8)
+  weeklyReport       Boolean  @default(false)
+  monthlyReport      Boolean  @default(true)
+  reportDay          Int      @default(1)
+  reportRecipients   String[] @default([])
+  reportAutoEmail    Boolean  @default(false)
+  reportWhiteLabel   Boolean  @default(true)
+  observationDays    Int?
+  updatedAt          DateTime @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+}
+
+model OnboardingChecklistItem {
+  id             String   @id @default(cuid())
+  organizationId String
+  clientId       String
+  key            String   // logo, business_description, service_list, ...
+  label          String
+  complete       Boolean  @default(false)
+  completedAt    DateTime?
+  completedById  String?
+  notes          String?
+  sortOrder      Int      @default(0)
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, key])
+}
+
+// ─────────────────────────── Support CRM ───────────────────────────
+
+model SupportCall {
+  id             String        @id @default(cuid())
+  organizationId String
+  clientId       String
+  contactName    String?
+  occurredAt     DateTime
+  direction      CallDirection
+  outcome        CallOutcome
+  durationMin    Int?
+  purpose        String?
+  discussion     String?
+  result         String?
+  followUpRequired Boolean     @default(false)
+  followUpDate   DateTime?
+  tags           String[]      @default([])
+  createdById    String
+  createdAt      DateTime      @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, clientId, occurredAt])
+  @@index([organizationId, createdById])
+}
+
+model SupportNote {
+  id             String         @id @default(cuid())
+  organizationId String
+  clientId       String
+  body           String
+  category       String         @default("General")
+  priority       Priority       @default(NORMAL)
+  visibility     NoteVisibility @default(INTERNAL)
+  useAsAiContext Boolean        @default(false)
+  pinned         Boolean        @default(false)
+  attachmentUrl  String?
+  createdById    String
+  createdAt      DateTime       @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, clientId, createdAt])
+}
+
+model FollowUp {
+  id             String    @id @default(cuid())
+  organizationId String
+  clientId       String
+  title          String
+  dueAt          DateTime
+  assignedToId   String?   // OrganizationUser id
+  sourceCallId   String?
+  taskId         String?
+  completedAt    DateTime?
+  remindedAt     DateTime?
+  escalatedAt    DateTime?
+  createdAt      DateTime  @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, assignedToId, dueAt])
+}
+
+model SupportTicket {
+  id             String       @id @default(cuid())
+  organizationId String
+  clientId       String
+  number         Int
+  type           TicketType
+  subject        String
+  description    String
+  priority       Priority     @default(NORMAL)
+  status         TicketStatus @default(OPEN)
+  assignedToId   String?
+  requestedBy    String?
+  slaDueAt       DateTime?
+  firstResponseAt DateTime?
+  resolvedAt     DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  messages TicketMessage[]
+
+  @@unique([organizationId, number])
+  @@index([organizationId, status, slaDueAt])
+}
+
+model TicketMessage {
+  id             String   @id @default(cuid())
+  organizationId String
+  ticketId       String
+  authorId       String?
+  authorName     String
+  fromClient     Boolean  @default(false)
+  body           String
+  createdAt      DateTime @default(now())
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+}
+
+// ───────────────────────────── Tasks ─────────────────────────────
+
+model Task {
+  id             String     @id @default(cuid())
+  organizationId String
+  clientId       String?
+  category       String     @default("General")
+  title          String
+  description    String?
+  assignedToId   String?    // OrganizationUser id
+  priority       Priority   @default(NORMAL)
+  dueAt          DateTime?
+  status         TaskStatus @default(OPEN)
+  source         TaskSource @default(HUMAN)
+  sourceRef      String?    // id of the review/audit/recommendation/etc.
+  dedupeKey      String?
+  dependsOnId    String?
+  createdById    String?
+  completedAt    DateTime?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  client    Client?       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  dependsOn Task?         @relation("TaskDeps", fields: [dependsOnId], references: [id])
+  blocks    Task[]        @relation("TaskDeps")
+  comments  TaskComment[]
+
+  @@unique([organizationId, dedupeKey])
+  @@index([organizationId, assignedToId, status])
+  @@index([organizationId, clientId, status])
+}
+
+model TaskComment {
+  id             String   @id @default(cuid())
+  organizationId String
+  taskId         String
+  authorId       String
+  body           String
+  mentions       String[] @default([])
+  createdAt      DateTime @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+}
+
+/// @mentions inside tasks, notes, approvals and client records.
+model Mention {
+  id             String   @id @default(cuid())
+  organizationId String
+  clientId       String?
+  mentionedId    String   // OrganizationUser id
+  authorId       String
+  entityType     String
+  entityId       String
+  excerpt        String
+  readAt         DateTime?
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId, mentionedId, readAt])
+}
+
+// ─────────────────────── Google & integrations ───────────────────────
+
+model GoogleConnection {
+  id              String           @id @default(cuid())
+  organizationId  String
+  ownerType       String           // AGENCY | CLIENT
+  clientId        String?          // set when the client connected via portal
+  email           String
+  googleUserId    String?
+  mode            IntegrationMode  @default(LIVE)
+  status          ConnectionStatus @default(CONNECTED)
+  scopes          String[]         @default([])
+  accessTokenEnc  String?
+  refreshTokenEnc String?
+  tokenExpiresAt  DateTime?
+  lastSyncAt      DateTime?
+  lastError       String?
+  connectedById   String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  accounts     GbpAccount[]
+
+  @@unique([organizationId, email])
+}
+
+model GbpAccount {
+  id             String   @id @default(cuid())
+  organizationId String
+  connectionId   String
+  googleName     String   // accounts/123
+  accountName    String
+  type           String?
+  createdAt      DateTime @default(now())
+
+  connection GoogleConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  locations  GbpLocation[]
+
+  @@unique([connectionId, googleName])
+}
+
+model GbpLocation {
+  id              String    @id @default(cuid())
+  organizationId  String
+  accountId       String
+  clientId        String?   // assignment; unique so a profile cannot be assigned twice
+  googleName      String    // locations/456
+  title           String
+  storeCode       String?
+  address         String?
+  phone           String?
+  websiteUri      String?
+  primaryCategory String?
+  description     String?
+  hours           Json?
+  serviceArea     Json?
+  attributes      Json?
+  latitude        Float?
+  longitude       Float?
+  verified        Boolean   @default(true)
+  rawProfile      Json?
+  lastSyncAt      DateTime?
+  syncStatus      ConnectionStatus @default(PENDING)
+  assignedAt      DateTime?
+  assignedById    String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  account    GbpAccount    @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  client     Client?       @relation(fields: [clientId], references: [id])
+  services   GbpService[]
+  categories GbpCategory[]
+  posts      GbpPost[]
+  reviews    GbpReview[]
+  media      GbpMedia[]
+  metrics    GbpMetric[]
+  snapshots  GbpSnapshot[]
+
+  @@unique([accountId, googleName])
+  @@unique([organizationId, googleName, clientId])
+  @@index([organizationId, clientId])
+}
+
+model GbpService {
+  id             String   @id @default(cuid())
+  organizationId String
+  clientId       String?
+  locationId     String
+  name           String
+  description    String?
+  price          String?
+  source         String   @default("google") // google | platform
+
+  location GbpLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@unique([locationId, name])
+}
+
+model GbpCategory {
+  id             String   @id @default(cuid())
+  organizationId String
+  clientId       String?
+  locationId     String
+  name           String
+  isPrimary      Boolean  @default(false)
+
+  location GbpLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@unique([locationId, name])
+}
+
+model GbpPost {
+  id             String    @id @default(cuid())
+  organizationId String
+  clientId       String?
+  locationId     String
+  googleName     String?
+  contentItemId  String?   @unique
+  summary        String
+  topicType      String    @default("STANDARD")
+  ctaType        String?
+  ctaUrl         String?
+  mediaUrl       String?
+  state          String    @default("LIVE")
+  publishedAt    DateTime?
+  verifiedAt     DateTime?
+  createdAt      DateTime  @default(now())
+
+  location GbpLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, clientId, publishedAt])
+}
+
+model GbpReview {
+  id              String               @id @default(cuid())
+  organizationId  String
+  clientId        String
+  locationId      String
+  googleName      String
+  reviewerName    String
+  reviewerPhoto   String?
+  rating          Int
+  comment         String?
+  reviewedAt      DateTime
+  sentiment       Sentiment?
+  servicesMentioned String[]           @default([])
+  replyText       String?
+  replyDraft      String?
+  replyStatus     ReviewResponseStatus @default(UNANSWERED)
+  repliedAt       DateTime?
+  repliedBy       ActorType?
+  alertCreated    Boolean              @default(false)
+  createdAt       DateTime             @default(now())
+
+  client   Client      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  location GbpLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@unique([locationId, googleName])
+  @@index([organizationId, clientId, replyStatus])
+}
+
+model GbpMedia {
+  id             String   @id @default(cuid())
+  organizationId String
+  clientId       String?
+  locationId     String
+  googleName     String?
+  url            String
+  category       String?
+  createdTime    DateTime?
+
+  location GbpLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
+}
+
+model GbpMetric {
+  id             String   @id @default(cuid())
+  organizationId String
+  clientId       String?
+  locationId     String
+  date           DateTime @db.Date
+  impressionsMaps   Int   @default(0)
+  impressionsSearch Int   @default(0)
+  calls          Int      @default(0)
+  websiteClicks  Int      @default(0)
+  directionRequests Int   @default(0)
+
+  location GbpLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@unique([locationId, date])
+}
+
+/// Point-in-time copy of GBP info used to detect unauthorized / Google-made changes.
+model GbpSnapshot {
+  id             String   @id @default(cuid())
+  organizationId String
+  clientId       String?
+  locationId     String
+  data           Json
+  hash           String
+  createdAt      DateTime @default(now())
+
+  location GbpLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@index([locationId, createdAt])
+}
+
+/// Non-Google integrations: WordPress/website, GSC, GA4, SERP provider.
+model Integration {
+  id             String           @id @default(cuid())
+  organizationId String
+  clientId       String?
+  kind           IntegrationKind
+  mode           IntegrationMode  @default(LIVE)
+  status         ConnectionStatus @default(PENDING)
+  externalId     String?          // GSC property / GA4 property id / site url
+  displayName    String?
+  credentialsEnc String?          // encrypted JSON (api secret, etc.)
+  googleConnectionId String?
+  config         Json             @default("{}")
+  lastSyncAt     DateTime?
+  lastError      String?
+  errorCount     Int              @default(0)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  client Client? @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, clientId, kind])
+}
+
+// ─────────────────────────── Website SEO ───────────────────────────
+
+model Website {
+  id             String   @id @default(cuid())
+  organizationId String
+  clientId       String
+  url            String
+  platform       String?  // wordpress | shopify | wix | custom
+  cms            Json     @default("{}") // detected theme/plugins/builder/seo plugin
+  integrationId  String?
+  isUp           Boolean?
+  sslValidUntil  DateTime?
+  lastCheckedAt  DateTime?
+  lastCrawlAt    DateTime?
+  robotsTxt      String?
+  sitemapUrl     String?
+  responseMs     Int?
+  createdAt      DateTime @default(now())
+
+  client Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  pages  WebsitePage[]
+  backups WebsiteBackup[]
+  actions SeoAction[]
+
+  @@unique([clientId, url])
+}
+
+model WebsitePage {
+  id             String   @id @default(cuid())
+  organizationId String
+  clientId       String
+  websiteId      String
+  url            String
+  externalId     String?  // WordPress post id
+  statusCode     Int?
+  title          String?
+  metaDescription String?
+  h1             String?
+  h2s            String[] @default([])
+  wordCount      Int?
+  canonical      String?
+  indexable      Boolean  @default(true)
+  schemaTypes    String[] @default([])
+  internalLinksOut Int    @default(0)
+  internalLinksIn  Int    @default(0)
+  imagesMissingAlt Int    @default(0)
+  builder        String?  // elementor | gutenberg | classic
+  contentHash    String?
+  lastMajorChangeAt DateTime?
+  lastCrawledAt  DateTime?
+  createdAt      DateTime @default(now())
+
+  website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+
+  @@unique([websiteId, url])
+}
+
+model WebsiteBackup {
+  id             String   @id @default(cuid())
+  organizationId String
+  clientId       String
+  websiteId      String
+  pageUrl        String?
+  externalId     String?
+  reason         String
+  snapshot       Json     // content, seo metadata, config
+  createdById    String?
+  restoredAt     DateTime?
+  createdAt      DateTime @default(now())
+
+  website Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+}
+
+model SeoAudit {
+  id             String    @id @default(cuid())
+  organizationId String
+  clientId       String
+  kind           String    // WEBSITE | GBP
+  status         RunStatus @default(QUEUED)
+  score          Int?
+  breakdown      Json?
+  pagesCrawled   Int       @default(0)
+  summary        String?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime  @default(now())
+
+  client Client     @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  issues SeoIssue[]
+
+  @@index([organizationId, clientId, kind, createdAt])
+}
+
+model SeoIssue {
+  id             String   @id @default(cuid())
+  organizationId String
+  clientId       String
+  auditId        String
+  code           String   // missing_meta_description, broken_link, ...
+  category       String   // technical | on_page | content | links | images | schema | performance | local
+  severity       Severity
+  title          String
+  detail         String?
+  url            String?
+  autoFixable    Boolean  @default(false)
+  status         String   @default("OPEN") // OPEN | FIXED | IGNORED
+  fingerprint    String
+  firstSeenAt    DateTime @default(now())
+  resolvedAt     DateTime?
+
+  audit SeoAudit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, clientId, status])
+}
+
+/// Every change made to a client asset (website or GBP) with before/after and rollback info.
+model SeoAction {
+  id             String    @id @default(cuid())
+  organizationId String
+  clientId       String
+  websiteId      String?
+  locationId     String?
+  recommendationId String?
+  target         String    // page url / gbp field
+  field          String    // meta_description, alt_text, gbp.description ...
+  beforeValue    String?
+  afterValue     String?
+  reason         String?
+  risk           RiskLevel
+  actorType      ActorType
+  actorId        String?
+  backupId       String?
+  status         String    @default("APPLIED") // APPLIED | VERIFIED | FAILED | ROLLED_BACK
+  rollbackable   Boolean   @default(true)
+  rolledBackAt   DateTime?
+  rolledBackById String?
+  measuredOutcome String?  // IMPROVED | NO_CHANGE | DECLINED
+  createdAt      DateTime  @default(now())
+
+  website Website? @relation(fields: [websiteId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, clientId, target, createdAt])
+}
+
+// ─────────────────────── AI engine & approvals ───────────────────────
+
+model AiRecommendation {
+  id              String               @id @default(cuid())
+  organizationId  String
+  clientId        String
+  locationId      String?
+  domain          String               // GBP | WEBSITE | CONTENT | REVIEWS | RANKINGS | STRATEGY
+  action          String               // machine action key, e.g. update_gbp_description
+  title           String
+  target          String?
+  reason          String
+  seoBenefit      String?
+  currentValue    String?
+  suggestedValue  String?
+  risk            RiskLevel
+  actionClass     ActionClass
+  confidence      Float
+  sourceSignals   String[]             @default([])
+  evidence        Json?
+  expectedImpact  String?
+  status          RecommendationStatus @default(PROPOSED)
+  severity        Severity             @default(MEDIUM)
+  executeAfter    DateTime?
+  executedAt      DateTime?
+  verifiedAt      DateTime?
+  outcome         String?
+  blockedReason   String?
+  payload         Json?
+  dedupeKey       String?
+  createdBy       ActorType            @default(AI)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  client   Client     @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  approval Approval?
+
+  @@unique([clientId, dedupeKey])
+  @@index([organizationId, clientId, status])
+}
+
+model Approval {
+  id               String           @id @default(cuid())
+  organizationId   String
+  clientId         String
+  category         ApprovalCategory
+  title            String
+  description      String?
+  beforeValue      String?
+  afterValue       String?
+  reason           String?
+  risk             RiskLevel        @default(MEDIUM)
+  confidence       Float?
+  recommendationId String?          @unique
+  contentItemId    String?
+  reviewId         String?
+  status           ApprovalStatus   @default(PENDING)
+  requiresClient   Boolean          @default(false)
+  decidedById      String?
+  decidedAt        DateTime?
+  decisionNote     String?
+  scheduledFor     DateTime?
+  createdAt        DateTime         @default(now())
+
+  client         Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  recommendation AiRecommendation? @relation(fields: [recommendationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, status, category])
+}
+
+model WeeklyStrategy {
+  id             String   @id @default(cuid())
+  organizationId String
+  clientId       String
+  weekOf         DateTime @db.Date
+  summary        String
+  priorities     Json     // [{rank, title, why, impact, risk, mode}]
+  inputs         Json?
+  generatedBy    String   @default("AI")
+  createdAt      DateTime @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, weekOf])
+}
+
+// ───────────────────────── Rankings & data ─────────────────────────
+
+model Keyword {
+  id             String   @id @default(cuid())
+  organizationId String
+  clientId       String
+  phrase         String
+  group          String   @default("PRIMARY") // PRIMARY | SECONDARY | GBP | SERVICE | LOCATION | BLOG
+  location       String?
+  targetUrl      String?
+  searchVolume   Int?
+  currentPosition Float?
+  previousPosition Float?
+  bestPosition   Float?
+  localPosition  Float?
+  lastCheckedAt  DateTime?
+  createdAt      DateTime @default(now())
+
+  client  Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  history RankHistory[]
+
+  @@unique([clientId, phrase, location])
+}
+
+model RankHistory {
+  id             String   @id @default(cuid())
+  organizationId String
+  clientId       String
+  keywordId      String
+  position       Float?
+  localPosition  Float?
+  url            String?
+  checkedAt      DateTime @default(now())
+  source         String   @default("DEMO")
+
+  keyword Keyword @relation(fields: [keywordId], references: [id], onDelete: Cascade)
+
+  @@index([keywordId, checkedAt])
+}
+
+model LocalGridRun {
+  id             String   @id @default(cuid())
+  organizationId String
+  clientId       String
+  keyword        String
+  gridSize       Int
+  radiusKm       Float
+  centerLat      Float
+  centerLng      Float
+  points         Json     // [{row,col,lat,lng,position}]
+  avgPosition    Float?
+  top3Coverage   Float?
+  top10Coverage  Float?
+  shareOfVoice   Float?
+  source         String   @default("DEMO")
+  createdAt      DateTime @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, keyword, createdAt])
+}
+
+model Competitor {
+  id             String   @id @default(cuid())
+  organizationId String
+  clientId       String
+  name           String
+  website        String?
+  gbpCategory    String?
+  reviewCount    Int?
+  rating         Float?
+  postsPerMonth  Float?
+  services       String[] @default([])
+  contentTopics  String[] @default([])
+  visibility     Float?
+  avgRank        Float?
+  lastCheckedAt  DateTime?
+  createdAt      DateTime @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+}
+
+model GscMetric {
+  id             String   @id @default(cuid())
+  organizationId String
+  clientId       String
+  date           DateTime @db.Date
+  query          String
+  page           String?
+  clicks         Int
+  impressions    Int
+  ctr            Float
+  position       Float
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, date])
+  @@index([clientId, query])
+}
+
+model Ga4Metric {
+  id             String   @id @default(cuid())
+  organizationId String
+  clientId       String
+  date           DateTime @db.Date
+  landingPage    String   @default("(all)")
+  organicUsers   Int
+  organicSessions Int
+  engagedSessions Int
+  conversions    Int
+  leads          Int
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, date, landingPage])
+}
+
+// ─────────────────────────── Content & media ───────────────────────────
+
+model ContentItem {
+  id              String        @id @default(cuid())
+  organizationId  String
+  clientId        String
+  locationId      String?
+  type            ContentType
+  status          ContentStatus @default(DRAFT)
+  title           String
+  topic           String?
+  category        String?
+  body            String?
+  primaryKeyword  String?
+  keywords        String[]      @default([])
+  servicePromoted String?
+  cta             String?
+  ctaUrl          String?
+  seo             Json?         // slug, seoTitle, meta, headings, faqs, schema, internal links...
+  imageId         String?       // MediaAsset
+  scheduledFor    DateTime?
+  publishedAt     DateTime?
+  externalId      String?       // GBP post name / WP post id
+  externalUrl     String?
+  fingerprint     String?       // content memory: normalized topic hash
+  generatedBy     ActorType     @default(AI)
+  aiModel         String?
+  failureReason   String?
+  attempts        Int           @default(0)
+  createdById     String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  client Client      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  image  MediaAsset? @relation(fields: [imageId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, clientId, type, scheduledFor])
+  @@index([organizationId, status, scheduledFor])
+}
+
+model MediaAsset {
+  id             String      @id @default(cuid())
+  organizationId String
+  clientId       String
+  folder         MediaFolder
+  url            String
+  filename       String
+  mimeType       String
+  width          Int?
+  height         Int?
+  sizeBytes      Int?
+  title          String?
+  altText        String?
+  tags           String[]    @default([])
+  status         MediaStatus @default(PENDING_REVIEW)
+  approvedForGbp  Boolean    @default(false)
+  approvedForBlog Boolean    @default(false)
+  approvedForAds  Boolean    @default(false)
+  isAiGenerated  Boolean     @default(false)
+  usageCount     Int         @default(0)
+  lastUsedAt     DateTime?
+  uploadedById   String?
+  createdAt      DateTime    @default(now())
+
+  client    Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  content   ContentItem[]
+  aiImage   AiGeneratedImage?
+
+  @@index([organizationId, clientId, folder])
+}
+
+model AiGeneratedImage {
+  id             String   @id @default(cuid())
+  organizationId String
+  clientId       String
+  mediaId        String   @unique
+  prompt         String
+  negativePrompt String?
+  provider       String
+  model          String?
+  purpose        String   // GBP_POST | BLOG | SOCIAL | REPORT | WEBSITE
+  qualityScore   Float?
+  safetyPassed   Boolean  @default(true)
+  safetyNotes    String[] @default([])
+  brandCheckPassed Boolean @default(true)
+  createdAt      DateTime @default(now())
+
+  media MediaAsset @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+}
+
+model FileAsset {
+  id             String   @id @default(cuid())
+  organizationId String
+  clientId       String
+  name           String
+  url            String
+  mimeType       String
+  sizeBytes      Int
+  category       String   @default("Document") // Logo, Brand Guidelines, Contract, Report, Photo, Screenshot, Website Asset, Document
+  tags           String[] @default([])
+  clientVisible  Boolean  @default(false)
+  uploadedById   String?
+  createdAt      DateTime @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+}
+
+// ─────────────────────────── Reports ───────────────────────────
+
+model Report {
+  id             String       @id @default(cuid())
+  organizationId String
+  clientId       String
+  type           ReportType
+  status         ReportStatus @default(GENERATING)
+  title          String
+  periodStart    DateTime
+  periodEnd      DateTime
+  summary        String?
+  data           Json?
+  whiteLabel     Boolean      @default(true)
+  sentTo         String[]     @default([])
+  sentAt         DateTime?
+  clientVisible  Boolean      @default(true)
+  createdById    String?
+  createdAt      DateTime     @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, clientId, createdAt])
+}
+
+// ─────────────────────── Automation & observability ───────────────────────
+
+/// Unified job queue + execution history (Automations → Execution History).
+model AutomationRun {
+  id             String    @id @default(cuid())
+  organizationId String
+  clientId       String?
+  type           String    // gbp.sync, content.generate_gbp_post, ...
+  label          String?
+  payload        Json      @default("{}")
+  status         RunStatus @default(QUEUED)
+  priority       Int       @default(5)
+  runAt          DateTime  @default(now())
+  attempts       Int       @default(0)
+  maxAttempts    Int       @default(3)
+  lockedAt       DateTime?
+  lockedBy       String?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  result         Json?
+  lastError      String?
+  errorDetail    String?
+  dedupeKey      String?   @unique
+  triggeredBy    ActorType @default(AUTOMATION)
+  triggeredById  String?
+  createdAt      DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([status, runAt])
+  @@index([organizationId, clientId, createdAt])
+  @@index([organizationId, status])
+}
+
+model Alert {
+  id             String      @id @default(cuid())
+  organizationId String
+  clientId       String?
+  severity       Severity
+  type           String      // website_offline, gbp_disconnected, negative_review, ...
+  title          String
+  detail         String?
+  status         AlertStatus @default(OPEN)
+  dedupeKey      String?
+  groupKey       String?     // for batching low-priority alerts
+  entityType     String?
+  entityId       String?
+  acknowledgedById String?
+  resolvedAt     DateTime?
+  createdAt      DateTime    @default(now())
+
+  client Client? @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, dedupeKey])
+  @@index([organizationId, status, severity])
+}
+
+model Notification {
+  id             String    @id @default(cuid())
+  organizationId String
+  recipientId    String    // OrganizationUser id
+  clientId       String?
+  type           String
+  title          String
+  body           String?
+  link           String?
+  severity       Severity  @default(LOW)
+  channel        String    @default("IN_APP") // IN_APP | EMAIL | SMS | WHATSAPP
+  digestKey      String?
+  readAt         DateTime?
+  emailedAt      DateTime?
+  createdAt      DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, recipientId, readAt])
+}
+
+/// Client activity timeline (human-readable).
+model ActivityLog {
+  id             String    @id @default(cuid())
+  organizationId String
+  clientId       String?
+  category       String    // GBP | WEBSITE | SEO | CONTENT | SUPPORT | AI | CLIENT | SYSTEM
+  type           String
+  title          String
+  detail         String?
+  actorType      ActorType
+  actorId        String?
+  actorName      String?
+  entityType     String?
+  entityId       String?
+  createdAt      DateTime  @default(now())
+
+  client Client? @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, clientId, createdAt])
+}
+
+/// Immutable security/compliance audit trail. Never updated or deleted by application code.
+model AuditLog {
+  id             String    @id @default(cuid())
+  organizationId String?
+  clientId       String?
+  userId         String?
+  actorType      ActorType
+  action         String
+  entityType     String?
+  entityId       String?
+  oldValue       Json?
+  newValue       Json?
+  source         String?   // ui | api | automation | worker | oauth | portal
+  approvalId     String?
+  automationRunId String?
+  ip             String?
+  createdAt      DateTime  @default(now())
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@index([organizationId, clientId, createdAt])
+}
+
+model OAuthState {
+  id             String   @id @default(cuid())
+  stateHash      String   @unique
+  organizationId String
+  userId         String
+  purpose        String   // AGENCY_GBP | CLIENT_GBP | GSC | GA4
+  clientId       String?
+  codeVerifier   String?
+  returnTo       String?
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
+}
+
+model RateLimitBucket {
+  key        String   @id
+  count      Int
+  resetAt    DateTime
+}
