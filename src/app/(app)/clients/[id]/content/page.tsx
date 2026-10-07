@@ -53,7 +53,7 @@ async function ItemsTab({ clientId }: { clientId: string }) {
       <ul className="divide-y divide-ink-100">
         {items.map((i) => (
           <li key={i.id} className="flex items-center gap-3 px-5 py-3">
-            {i.image ? (/* eslint-disable-next-line @next/next/no-img-element */ <img src={i.image.url} alt="" className="h-12 w-16 rounded-lg object-cover" />) : <div className="h-12 w-16 rounded-lg bg-ink-100" />}
+            {i.image ? (  <img src={i.image.url} alt="" className="h-12 w-16 rounded-lg object-cover" />) : <div className="h-12 w-16 rounded-lg bg-ink-100" />}
             <div className="min-w-0 flex-1">
               <Link href={`/content/${i.id}`} className="block truncate text-sm font-medium hover:text-brand-700">{i.title}</Link>
               <div className="text-xs text-ink-500">{pretty(i.type)} · {i.servicePromoted ?? "—"} · {i.status === "PUBLISHED" ? `published ${fmtDate(i.publishedAt)}` : `scheduled ${fmtDate(i.scheduledFor, true)}`}</div>
@@ -102,7 +102,7 @@ async function MediaTab({ clientId, folder, q, canManage }: { clientId: string; 
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
             {media.map((m) => (
               <div key={m.id} className="card overflow-hidden">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
+                { }
                 <img src={m.url} alt={m.altText ?? ""} className="aspect-[4/3] w-full bg-ink-100 object-cover" />
                 <div className="space-y-1.5 p-2.5">
                   <div className="truncate text-xs font-medium">{m.title ?? m.filename}</div>

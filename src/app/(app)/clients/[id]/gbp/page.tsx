@@ -166,7 +166,7 @@ export default async function ClientGbp({ params, searchParams }: { params: Prom
           <ul className="divide-y divide-ink-100">
             {posts.map((p) => (
               <li key={p.id} className="flex gap-3 px-5 py-3">
-                {p.mediaUrl ? (/* eslint-disable-next-line @next/next/no-img-element */ <img src={p.mediaUrl} alt="" className="h-16 w-20 rounded-lg object-cover" />) : <div className="h-16 w-20 rounded-lg bg-ink-100" />}
+                {p.mediaUrl ? (  <img src={p.mediaUrl} alt="" className="h-16 w-20 rounded-lg object-cover" />) : <div className="h-16 w-20 rounded-lg bg-ink-100" />}
                 <div className="min-w-0 flex-1">
                   <p className="line-clamp-2 text-sm text-ink-700">{p.summary}</p>
                   <div className="mt-1 text-xs text-ink-500">{fmtDate(p.publishedAt)} · {p.state} {p.verifiedAt && <Badge tone="green">verified</Badge>} {p.contentItemId && <Badge tone="blue">autopilot</Badge>}</div>

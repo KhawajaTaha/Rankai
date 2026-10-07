@@ -89,7 +89,7 @@ export default async function ClientSettings({ params, searchParams }: { params:
       {tab === "brand-kit" && (
         <Card title="Brand Kit" subtitle="The AI content & image generators follow these">
           <ActionForm action={updateBrandKitAction.bind(null, id)} resetOnSuccess={false} className="grid gap-3 sm:grid-cols-3">
-            <Field label="Logo" className="sm:col-span-3"><div className="flex items-center gap-3">{brand.logoUrl && (/* eslint-disable-next-line @next/next/no-img-element */ <img src={brand.logoUrl} alt="logo" className="h-12 w-12 rounded-lg object-contain ring-1 ring-ink-200" />)}<input name="logo" type="file" accept="image/*" className="input py-1.5 text-xs" /></div></Field>
+            <Field label="Logo" className="sm:col-span-3"><div className="flex items-center gap-3">{brand.logoUrl && (  <img src={brand.logoUrl} alt="logo" className="h-12 w-12 rounded-lg object-contain ring-1 ring-ink-200" />)}<input name="logo" type="file" accept="image/*" className="input py-1.5 text-xs" /></div></Field>
             {([["primaryColor", "Primary", brand.primaryColor], ["secondaryColor", "Secondary", brand.secondaryColor], ["accentColor", "Accent", brand.accentColor]] as const).map(([n, l, v]) => <Field key={n} label={`${l} color`}><div className="flex gap-2"><input type="color" defaultValue={v} className="h-9 w-12 rounded-lg border border-ink-200" aria-hidden /><input name={n} defaultValue={v} className="input" /></div></Field>)}
             <Field label="Heading font"><input name="headingFont" defaultValue={brand.headingFont} className="input" /></Field>
             <Field label="Body font"><input name="bodyFont" defaultValue={brand.bodyFont} className="input" /></Field>

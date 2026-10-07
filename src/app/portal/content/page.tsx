@@ -13,7 +13,7 @@ export default async function PortalContent() {
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {items.map((i) => (
           <div key={i.id} className="card overflow-hidden">
-            {i.image ? (/* eslint-disable-next-line @next/next/no-img-element */ <img src={i.image.url} alt="" className="aspect-video w-full object-cover" />) : <div className="aspect-video bg-ink-100" />}
+            {i.image ? (  <img src={i.image.url} alt="" className="aspect-video w-full object-cover" />) : <div className="aspect-video bg-ink-100" />}
             <div className="p-4">
               <div className="flex items-center justify-between gap-2"><span className="text-xs text-ink-500">{i.type === "BLOG" ? "Article" : "Google post"} · {fmtDate(i.publishedAt ?? i.scheduledFor)}</span><StatusBadge status={i.status} /></div>
               <h3 className="mt-1 text-sm font-semibold">{i.title}</h3>

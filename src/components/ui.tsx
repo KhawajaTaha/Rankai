@@ -139,7 +139,7 @@ export function Avatar({ name, src, size = 32, square }: { name: string; src?: s
   const palette = ["bg-brand-100 text-brand-700", "bg-emerald-100 text-emerald-700", "bg-amber-100 text-amber-800", "bg-violet-100 text-violet-700", "bg-rose-100 text-rose-700", "bg-teal-100 text-teal-700"];
   const idx = [...name].reduce((s, ch) => s + ch.charCodeAt(0), 0) % palette.length;
   if (src) {
-    // eslint-disable-next-line @next/next/no-img-element
+     
     return <img src={src} alt={name} width={size} height={size} className={cn("shrink-0 object-cover", square ? "rounded-xl" : "rounded-full")} style={{ width: size, height: size }} />;
   }
   return (

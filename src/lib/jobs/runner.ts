@@ -17,6 +17,10 @@ export async function runJob(run: AutomationRun) {
     await db.automationRun.update({ where: { id: run.id }, data: { status: "FAILED", lastError: `No handler for ${run.type}`, completedAt: new Date(), lockedAt: null } });
     return;
   }
+  if (run.clientId && !(await db.client.findUnique({ where: { id: run.clientId }, select: { id: true } }))) {
+    await db.automationRun.update({ where: { id: run.id }, data: { status: "CANCELLED", completedAt: new Date(), lastError: "Client no longer exists", lockedAt: null, lockedBy: null } });
+    return;
+  }
   try {
     const result = await entry.handler((run.payload ?? {}) as Record<string, unknown>, run);
     await db.automationRun.update({

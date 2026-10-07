@@ -41,7 +41,7 @@ export default async function ContentItemPage({ params }: { params: Promise<{ it
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="space-y-5 lg:col-span-2">
           <Card title="Preview">
-            {item.image && (/* eslint-disable-next-line @next/next/no-img-element */ <img src={item.image.url} alt={item.image.altText ?? ""} className="mb-4 max-h-80 w-full rounded-xl object-cover" />)}
+            {item.image && (  <img src={item.image.url} alt={item.image.altText ?? ""} className="mb-4 max-h-80 w-full rounded-xl object-cover" />)}
             {item.body ? <Markdown text={item.body} className="prose-sm text-sm text-ink-800" /> : <p className="text-sm text-ink-500">Not generated yet — content is generated a few days before its slot.</p>}
             {item.cta && <div className="mt-4"><Badge tone="blue">CTA: {item.cta}</Badge></div>}
           </Card>

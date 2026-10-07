@@ -1,4 +1,4 @@
-/* eslint-disable no-console */
+ 
 import { PrismaClient, type Prisma } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { PERMISSIONS, SYSTEM_ROLES, type RoleKey } from "../src/lib/permissions";
