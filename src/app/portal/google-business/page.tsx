@@ -1,14 +1,15 @@
 import { MapPin } from "lucide-react";
 import { requirePortal } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { modes } from "@/lib/env";
+import { env, modes } from "@/lib/env";
 import { Card, DemoBadge, KeyValue, PageHeader, ScoreRing, StatusBadge, fmtDate } from "@/components/ui";
 import { ActionForm, SubmitButton } from "@/components/client";
 import { assignLocationAction, connectGoogleAction } from "@/app/actions/google";
 
 export const metadata = { title: "Google Business" };
 
-export default async function PortalGbp() {
+export default async function PortalGbp({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+  const sp = await searchParams;
   const ctx = await requirePortal();
   const id = ctx.portalClientId;
   const [client, locations, posts] = await Promise.all([
@@ -22,6 +23,7 @@ export default async function PortalGbp() {
     return (
       <>
         <PageHeader title="Google Business Profile" />
+        {sp.error && <div className="mb-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{sp.error}</div>}
         <Card title="Connect your Google Business Profile" subtitle="Sign in with the Google account that manages your business profile and approve access. You can disconnect at any time.">
           {own.length ? (
             <ActionForm action={assignLocationAction.bind(null, id)} className="space-y-3">
@@ -32,7 +34,7 @@ export default async function PortalGbp() {
           ) : ctx.can("portal_connect_gbp") ? (
             <form action={connectGoogleAction.bind(null, "CLIENT_GBP", id)}>
               <button className="btn-primary"><MapPin className="h-4 w-4" /> Connect Google Business Profile</button>
-              {!modes.googleLive() && <p className="mt-2 text-xs text-amber-700">Demo Mode: a sample connection will be created.</p>}
+              {!modes.googleLive() && !env.live && <p className="mt-2 text-xs text-amber-700">Demo Mode: a sample connection will be created.</p>}
             </form>
           ) : <p className="text-sm text-ink-500">Ask the account owner to connect the profile.</p>}
         </Card>

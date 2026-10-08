@@ -6,6 +6,7 @@ import { proposeAction } from "../engine/recommendations";
 import { gbpProvider } from "../integrations/gbp";
 import { raiseAlert } from "../notify";
 import { createTask } from "../tasks";
+import { NotConfiguredError } from "../errors";
 
 /**
  * Review workflow (spec §26-27):
@@ -20,8 +21,19 @@ export async function processNewReview(reviewId: string) {
   const settings = brain.settings;
   const { sentiment, servicesMentioned } = analyzeReview(brain, review.rating, review.comment);
   const previous = await db.gbpReview.findMany({ where: { clientId: review.clientId, replyText: { not: null } }, orderBy: { repliedAt: "desc" }, take: 10, select: { replyText: true } });
-  const { reply } = await generateReviewReply(brain, { reviewerName: review.reviewerName, rating: review.rating, comment: review.comment, servicesMentioned }, previous.map((p) => p.replyText!));
-  await db.gbpReview.update({ where: { id: review.id }, data: { sentiment, servicesMentioned, replyDraft: reply, replyStatus: "DRAFTED" } });
+  let reply = "";
+  try {
+    reply = (await generateReviewReply(brain, { reviewerName: review.reviewerName, rating: review.rating, comment: review.comment, servicesMentioned }, previous.map((p) => p.replyText!))).reply;
+  } catch (e) {
+    if (!(e instanceof NotConfiguredError)) throw e;
+    // Live mode without AI: still run the reputation workflow, a human writes the reply.
+    await db.gbpReview.update({ where: { id: review.id }, data: { sentiment, servicesMentioned, replyStatus: "UNANSWERED" } });
+    if (review.rating >= 4) {
+      await createTask({ organizationId: review.organizationId, clientId: review.clientId, title: `Reply to ${review.rating}★ review from ${review.reviewerName}`, category: "Review", priority: "LOW", source: "REVIEW_ALERT", sourceRef: review.id, dedupeKey: `review:${review.id}` });
+      return { routed: "manual (AI not configured)" };
+    }
+  }
+  await db.gbpReview.update({ where: { id: review.id }, data: { sentiment, servicesMentioned, ...(reply ? { replyDraft: reply, replyStatus: "DRAFTED" as const } : {}) } });
 
   const positive = review.rating >= 4;
   if (settings?.reviewAutoReply === "NEVER") {

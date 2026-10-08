@@ -7,6 +7,7 @@ import {
   MessageSquare, Phone, Plug, Settings, Sparkles, Star, StickyNote, TrendingUp, UserPlus, Users, UsersRound, Workflow,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { BRAND } from "@/lib/brand";
 
 const ICONS = {
   AlertTriangle, BarChart3, Bell, Bot, CalendarClock, CheckCircle2, FileText, Globe, Headphones, Inbox, LayoutDashboard, ListTodo, MapPin,
@@ -15,15 +16,14 @@ const ICONS = {
 
 export type NavItem = { href: string; label: string; icon: keyof typeof ICONS; badge?: number; section?: string };
 
-export function Sidebar({ items, brand, sub }: { items: NavItem[]; brand: string; sub: string }) {
+export function Sidebar({ items, brand, sub, logo }: { items: NavItem[]; brand: string; sub: string; logo?: string | null }) {
   const path = usePathname();
   let lastSection: string | undefined;
   return (
     <aside className="sticky top-0 hidden h-screen w-[244px] shrink-0 flex-col border-r border-ink-200/80 bg-white lg:flex">
       <div className="flex items-center gap-2.5 px-5 py-5">
-        <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-sm">
-          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2.4}><path d="M12 2l3 7h7l-5.5 4.5L18.5 21 12 16.5 5.5 21l2-7.5L2 9h7z" /></svg>
-        </span>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={logo ?? BRAND.mark} alt="" className="h-9 w-9 shrink-0 rounded-xl object-contain" />
         <div className="min-w-0">
           <div className="truncate text-sm font-semibold text-ink-900">{brand}</div>
           <div className="truncate text-[11px] text-ink-500">{sub}</div>

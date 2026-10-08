@@ -54,7 +54,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex min-h-screen">
-      <Sidebar items={items} brand={ctx.org.whiteLabelName ?? ctx.org.name} sub={ctx.experience === "support" ? "Support workspace" : "Agency workspace"} />
+      <Sidebar items={items} logo={ctx.org.logoUrl} brand={ctx.org.whiteLabelName ?? ctx.org.name} sub={ctx.experience === "support" ? "Support workspace" : "Agency workspace"} />
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar name={ctx.user.name} role={ctx.roleName} unread={unread} items={items} settingsHref="/settings/security" />
         <main className="mx-auto w-full max-w-[1400px] flex-1 px-4 py-6 lg:px-8">{children}</main>

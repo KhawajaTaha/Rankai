@@ -1,6 +1,7 @@
 import { db } from "../db";
 import { addDays, isoDate } from "../utils";
 import { enqueue } from "./queue";
+import { env, modes } from "../env";
 
 /**
  * Scheduling engine (spec §84, §99-101). Runs every few minutes; uses dedupe keys per
@@ -40,11 +41,14 @@ export async function runScheduler(now = new Date()) {
       if (!paused && s && hasGbp && s.gbpPostingEnabled) await q("content.generate_due", org.id, c.id, day, "Generate upcoming content");
 
       // ── Weekly (spec §100) ──
-      if (!paused) {
+      const serpOk = !env.live || modes.serpLive();
+      if (!paused && serpOk) {
         if (s?.rankTracking === "DAILY") await q("ranks.check", org.id, c.id, day, "Daily ranking check");
         else if (s?.rankTracking !== "OFF") await q("ranks.check", org.id, c.id, weekKey, "Weekly ranking check");
-        if (s?.mapGrid === "WEEKLY") await q("grid.check", org.id, c.id, weekKey, "Weekly local grid");
-        if (s?.mapGrid === "MONTHLY") await q("grid.check", org.id, c.id, monthKey, "Monthly local grid");
+      }
+      if (!paused) {
+        if (serpOk && s?.mapGrid === "WEEKLY") await q("grid.check", org.id, c.id, weekKey, "Weekly local grid");
+        if (serpOk && s?.mapGrid === "MONTHLY") await q("grid.check", org.id, c.id, monthKey, "Monthly local grid");
         if (connected("GOOGLE_SEARCH_CONSOLE")) await q("gsc.sync", org.id, c.id, weekKey, "Search Console sync & opportunities");
         if (connected("GOOGLE_ANALYTICS_4")) await q("ga4.sync", org.id, c.id, weekKey, "GA4 sync");
         if (hasGbp && s?.gbpPostingEnabled) await q("content.plan", org.id, c.id, weekKey, "Plan content calendar");

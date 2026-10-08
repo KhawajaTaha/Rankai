@@ -8,6 +8,10 @@ const db = new PrismaClient();
 const PASSWORD = process.env.SEED_PASSWORD ?? "Autopilot!2026";
 
 async function main() {
+  if (process.env.APP_MODE === "live") {
+    console.error("APP_MODE=live: the demo seed is disabled. Use `npm run setup:live` to create your agency and admin account.");
+    process.exit(1);
+  }
   const existing = await db.organization.findFirst();
   if (existing && !process.argv.includes("--force")) {
     console.log("Database already seeded (pass --force after a reset to reseed).");

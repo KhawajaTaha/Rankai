@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { BRAND } from "@/lib/brand";
 
 export const metadata: Metadata = {
-  title: { default: "Local SEO Autopilot", template: "%s · Local SEO Autopilot" },
-  description: "AI-powered Local SEO automation platform for agencies",
+  title: { default: BRAND.name, template: `%s · ${BRAND.name}` },
+  description: BRAND.tagline,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { clientWhere } from "@/lib/tenancy";
 import { ReportView } from "@/components/report-view";
 import { PrintButton } from "@/components/print-button";
+import { BRAND } from "@/lib/brand";
 
 export default async function ReportPage({ params }: { params: Promise<{ reportId: string }> }) {
   const ctx = await requireStaff();
@@ -13,7 +14,7 @@ export default async function ReportPage({ params }: { params: Promise<{ reportI
   return (
     <div>
       <div className="mb-4 flex justify-end gap-2 print:hidden"><PrintButton /></div>
-      <ReportView report={report} clientName={report.client.name} brand={report.whiteLabel ? ctx.org.whiteLabelName ?? ctx.org.name : "Local SEO Autopilot"} />
+      <ReportView report={report} clientName={report.client.name} brand={report.whiteLabel ? ctx.org.whiteLabelName ?? ctx.org.name : BRAND.name} />
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { requirePortal } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { ReportView } from "@/components/report-view";
 import { PrintButton } from "@/components/print-button";
+import { BRAND } from "@/lib/brand";
 
 export default async function PortalReport({ params }: { params: Promise<{ reportId: string }> }) {
   const ctx = await requirePortal();
@@ -12,7 +13,7 @@ export default async function PortalReport({ params }: { params: Promise<{ repor
   return (
     <div>
       <div className="mb-4 flex justify-end print:hidden"><PrintButton /></div>
-      <ReportView report={report} clientName={report.client.name} brand={report.whiteLabel ? ctx.org.whiteLabelName ?? ctx.org.name : "Local SEO Autopilot"} />
+      <ReportView report={report} clientName={report.client.name} brand={report.whiteLabel ? ctx.org.whiteLabelName ?? ctx.org.name : BRAND.name} />
     </div>
   );
 }

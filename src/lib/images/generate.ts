@@ -4,6 +4,7 @@ import { env, modes } from "../env";
 import { saveFile } from "../storage";
 import { seeded } from "../utils";
 import { buildImagePrompt, NEGATIVE_PROMPT, screenImagePrompt } from "./safety";
+import { NotConfiguredError } from "../errors";
 
 export type ImagePurpose = "GBP_POST" | "BLOG" | "SOCIAL" | "REPORT" | "WEBSITE";
 
@@ -30,6 +31,7 @@ export async function selectOrGenerateImage(args: {
     notes.push("No relevant approved real image found");
   }
   if (args.mode === "OFF") return { media: null, source: "NONE", needsApproval: false, notes: [...notes, "AI images are OFF for this content type"] };
+  if (env.live && !modes.imagesLive()) return { media: null, source: "NONE", needsApproval: false, notes: [...notes, "AI image provider not configured"] };
   if (!args.consentAiImages) return { media: null, source: "NONE", needsApproval: false, notes: [...notes, "Client has not consented to AI-generated images"] };
   const media = await generateAiImage({ ...args });
   const approvedForPurpose = args.purpose === "GBP_POST" ? media.approvedForGbp : args.purpose === "BLOG" ? media.approvedForBlog : media.status === "APPROVED";
@@ -58,6 +60,7 @@ async function findRealImage(clientId: string, purpose: ImagePurpose, keywords: 
 
 export async function generateAiImage(args: { organizationId: string; clientId: string; purpose: ImagePurpose; concept: string; mode?: AiImageMode }) {
   const client = await db.client.findUniqueOrThrow({ where: { id: args.clientId }, include: { brandKit: true, automation: true } });
+  if (env.live && !modes.imagesLive()) throw new NotConfiguredError("IMAGES");
   const screen = screenImagePrompt(args.concept);
   const concept = screen.allowed ? args.concept : `Clean, professional concept image for ${client.industry ?? "a local business"} services`;
   const brand = client.brandKit;

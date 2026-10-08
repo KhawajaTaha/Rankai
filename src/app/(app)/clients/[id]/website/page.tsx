@@ -3,6 +3,7 @@ import { RotateCcw } from "lucide-react";
 import { requireStaff } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getAccessibleClient } from "@/lib/tenancy";
+import { env } from "@/lib/env";
 import { searchOpportunities } from "@/lib/services/website";
 import { ACTIONS } from "@/lib/engine/risk";
 import { addDays, fmtNum, pct } from "@/lib/utils";
@@ -89,7 +90,7 @@ export default async function ClientWebsite({ params, searchParams }: { params: 
                 <Field label="Website URL"><input name="url" defaultValue={website?.url ?? client.website ?? ""} className="input" /></Field>
                 <Field label="Connection type"><select name="kind" className="input"><option value="WEBSITE_WORDPRESS">WordPress (connector plugin)</option><option value="WEBSITE_GENERIC">Other platform (crawl & recommendations only)</option></select></Field>
                 <Field label="Connector shared secret" hint="Leave blank to generate one. Paste the same secret in WordPress → Settings → Local SEO Autopilot."><input name="secret" className="input" placeholder="auto-generate" /></Field>
-                <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="demo" className="h-4 w-4 rounded" /> Demo mode (no real site calls)</label>
+                {!env.live && <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="demo" className="h-4 w-4 rounded" /> Demo mode (no real site calls)</label>}
                 <SubmitButton>Save & verify</SubmitButton>
               </ActionForm>
             )}

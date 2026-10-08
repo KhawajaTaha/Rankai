@@ -4,6 +4,7 @@ import { activity, SYSTEM_ACTOR } from "../audit";
 import { generateReportSummary } from "../ai/generators";
 import { sendEmail } from "../email";
 import { env } from "../env";
+import { BRAND } from "../brand";
 import { addDays, fmtNum } from "../utils";
 
 const TITLES: Record<ReportType, string> = {
@@ -12,11 +13,13 @@ const TITLES: Record<ReportType, string> = {
 };
 
 /** Build a client report: what was done / improved / declined / needs attention / planned next (spec §64-66). */
-export async function generateReport(clientId: string, type: ReportType, opts: { createdById?: string | null; send?: boolean } = {}) {
+export async function generateReport(clientId: string, type: ReportType, opts: { createdById?: string | null; send?: boolean; start?: Date; end?: Date } = {}) {
   const client = await db.client.findUniqueOrThrow({ where: { id: clientId }, include: { automation: true, organization: true, contacts: true } });
-  const days = type === "WEEKLY_SUMMARY" ? 7 : 30;
-  const end = new Date();
-  const start = addDays(end, -days);
+  // Custom date range (e.g. "last 30 days" or a picked period); the comparison period has the same length.
+  const end = opts.end ?? new Date();
+  const start = opts.start ?? addDays(end, type === "WEEKLY_SUMMARY" ? -7 : -30);
+  if (start >= end) throw new Error("Report start date must be before the end date");
+  const days = Math.max(1, Math.round((end.getTime() - start.getTime()) / 86_400_000));
   const prevStart = addDays(start, -days);
   const report = await db.report.create({ data: { organizationId: client.organizationId, clientId, type, title: `${TITLES[type]} — ${client.name}`, periodStart: start, periodEnd: end, status: "GENERATING", whiteLabel: client.automation?.reportWhiteLabel ?? true, createdById: opts.createdById ?? null } });
   try {
@@ -73,7 +76,7 @@ export async function generateReport(clientId: string, type: ReportType, opts: {
       strategy ? `Next focus: ${(strategy.priorities as { title: string }[])[0]?.title ?? ""}.` : "",
     ].filter(Boolean);
     const summary = await generateReportSummary(client.name, facts, () => {
-      const parts = [`This ${days === 7 ? "week" : "month"}, ${facts[0]!.charAt(0).toLowerCase()}${facts[0]!.slice(1)}`];
+      const parts = [`${days === 7 ? "This week" : days >= 28 && days <= 31 ? "This month" : `In the last ${days} days`}, ${facts[0]!.charAt(0).toLowerCase()}${facts[0]!.slice(1)}`];
       if (data.gbp.viewsChange != null) parts.push(`Your Google profile was viewed ${fmtNum(maps)} times (${data.gbp.viewsChange >= 0 ? "up" : "down"} ${Math.abs(data.gbp.viewsChange)}%).`);
       if (avgNow != null && avgPrev != null) parts.push(`Your average search ranking ${avgNow <= avgPrev ? "improved" : "moved"} from ${avgPrev.toFixed(1)} to ${avgNow.toFixed(1)}.`);
       parts.push(`We completed ${fixes} improvements and replied to ${reviewsReplied} reviews.`);
@@ -84,7 +87,7 @@ export async function generateReport(clientId: string, type: ReportType, opts: {
     await activity({ organizationId: client.organizationId, clientId, category: "SYSTEM", type: "report.generated", title: `${TITLES[type]} generated`, actor: SYSTEM_ACTOR });
     const recipients = client.automation?.reportRecipients.length ? client.automation.reportRecipients : client.contacts.filter((c) => c.receivesReports && c.email).map((c) => c.email!);
     if ((opts.send ?? client.automation?.reportAutoEmail) && recipients.length) {
-      const brand = ready.whiteLabel ? client.organization.whiteLabelName ?? client.organization.name : "Local SEO Autopilot";
+      const brand = ready.whiteLabel ? client.organization.whiteLabelName ?? client.organization.name : BRAND.name;
       await sendEmail({ to: recipients, subject: `${TITLES[type]} — ${client.name}`, text: `${summary.data}\n\nView the full report: ${env.appUrl}/portal/reports/${ready.id}\n\n— ${brand}` });
       await db.report.update({ where: { id: ready.id }, data: { status: "SENT", sentAt: new Date(), sentTo: recipients } });
     }

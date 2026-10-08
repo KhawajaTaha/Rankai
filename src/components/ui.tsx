@@ -53,6 +53,9 @@ export function Badge({ children, tone = "gray", className, dot }: { children: R
 }
 
 export function DemoBadge({ label = "Demo Mode" }: { label?: string }) {
+  if (process.env.APP_MODE === "live") {
+    return <span title="This integration has no credentials yet — see Settings → Go-Live" className="inline-flex items-center gap-1 rounded-full bg-ink-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ink-600 ring-1 ring-inset ring-ink-200">Not configured</span>;
+  }
   return (
     <span title="No live credentials configured — realistic mocked data is used" className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800 ring-1 ring-inset ring-amber-300">
       {label}

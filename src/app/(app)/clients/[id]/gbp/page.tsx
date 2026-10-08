@@ -3,7 +3,7 @@ import { MapPin, RefreshCw } from "lucide-react";
 import { requireStaff } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getAccessibleClient } from "@/lib/tenancy";
-import { modes } from "@/lib/env";
+import { env, modes } from "@/lib/env";
 import { ACTIONS } from "@/lib/engine/risk";
 import { addDays, fmtNum } from "@/lib/utils";
 import { Badge, Card, DemoBadge, EmptyState, KeyValue, LineChart, ScoreRing, Stat, StatusBadge, Tabs, fmtDate, severityTone, timeAgo } from "@/components/ui";
@@ -14,7 +14,7 @@ import { pretty } from "@/lib/labels";
 
 const SUB = ["overview", "information", "categories", "services", "posts", "photos", "performance", "recommendations", "automation", "activity"];
 
-export default async function ClientGbp({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string; select?: string; loc?: string }> }) {
+export default async function ClientGbp({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string; select?: string; loc?: string; error?: string }> }) {
   const ctx = await requireStaff();
   const { id } = await params;
   const sp = await searchParams;
@@ -34,12 +34,13 @@ export default async function ClientGbp({ params, searchParams }: { params: Prom
   if (!loc) {
     return (
       <div className="grid gap-5 lg:grid-cols-2">
+        {sp.error && <div className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700 lg:col-span-2">{sp.error}</div>}
         <Card title="Method A — Client connects their own GBP" subtitle="The client clicks Connect Google Business Profile in their portal and approves access.">
           <p className="mb-4 text-sm text-ink-600">Invite the client to the portal (Settings → Portal users), or connect on their behalf if they&apos;re with you right now.</p>
           {ctx.can("connect_gbp") && (
             <form action={connectGoogleAction.bind(null, "CLIENT_GBP", id)}>
               <button className="btn-primary"><MapPin className="h-4 w-4" /> Connect with client&apos;s Google account</button>
-              {!modes.googleLive() && <p className="mt-2 text-xs text-amber-700">Google credentials aren&apos;t configured — this creates a Demo connection with mocked locations.</p>}
+              {!modes.googleLive() && <p className="mt-2 text-xs text-amber-700">{env.live ? "Google OAuth isn't configured yet — add GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET (Settings → Go-Live)." : "Google credentials aren't configured — this creates a Demo connection with mocked locations."}</p>}
             </form>
           )}
         </Card>

@@ -12,6 +12,7 @@ import { sha256 } from "../crypto";
 import { daysBetween } from "../utils";
 import { processNewReview } from "./reviews";
 import { refreshOnboarding } from "./onboarding";
+import { NotConfiguredError } from "../errors";
 
 /** Pull accounts + locations visible to a Google connection (agency "120 managed locations"). */
 export async function syncConnectionLocations(connectionId: string) {
@@ -266,8 +267,13 @@ export async function auditGbp(clientId: string, runId?: string) {
         });
       }
       if (s.issues.some((i) => i.code === "missing_description" || i.code === "weak_description")) {
-        const sug = await suggestGbpDescription(brain, loc.description);
-        await proposeAction({
+        const sug = await suggestGbpDescription(brain, loc.description).catch((e) => {
+          if (e instanceof NotConfiguredError) return null;
+          throw e;
+        });
+        if (!sug) {
+          await proposeAction({ clientId, locationId: loc.id, action: "manual_task", title: "Write an improved GBP business description", target: `gbp:${loc.id}:description`, reason: "The description is empty or under-uses services and service areas (AI writing is not configured).", confidence: 0.9, severity: "MEDIUM", sourceSignals: ["gbp_incompleteness"] });
+        } else await proposeAction({
           clientId, locationId: loc.id, action: "update_gbp_description", title: "Improve GBP business description", target: `gbp:${loc.id}:description`,
           reason: sug.reason, seoBenefit: "A complete description with services and service areas improves relevance.", currentValue: loc.description, suggestedValue: sug.description,
           confidence: 0.82, severity: loc.description ? "MEDIUM" : "HIGH", sourceSignals: ["gbp_incompleteness"], expectedImpact: "Better local relevance",

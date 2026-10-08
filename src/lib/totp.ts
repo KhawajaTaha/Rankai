@@ -42,6 +42,6 @@ export function verifyTotp(secret: string, code: string, window = 1): boolean {
   return false;
 }
 
-export function otpauthUrl(secret: string, email: string, issuer = "Local SEO Autopilot"): string {
+export function otpauthUrl(secret: string, email: string, issuer = "Top Tech Digital.AI"): string {
   return `otpauth://totp/${encodeURIComponent(issuer)}:${encodeURIComponent(email)}?secret=${secret}&issuer=${encodeURIComponent(issuer)}`;
 }

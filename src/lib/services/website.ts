@@ -1,6 +1,7 @@
 import tls from "node:tls";
 import type { Prisma } from "@prisma/client";
 import { db } from "../db";
+import { env } from "../env";
 import { activity, AI_ACTOR, SYSTEM_ACTOR } from "../audit";
 import { crawlSite } from "../integrations/crawler";
 import { fetchSearchAnalytics } from "../integrations/search-console";
@@ -19,6 +20,7 @@ const sha256Short = (s: string) => sha256(s).slice(0, 32);
 /** Demo websites (*.example or demo integrations) are crawled synthetically; everything else is crawled live. */
 function isDemoSite(url: string, integrationMode?: string | null) {
   if (integrationMode === "DEMO") return true;
+  if (env.live) return false;
   try {
     return new URL(url).hostname.endsWith(".example");
   } catch {

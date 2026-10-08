@@ -6,11 +6,14 @@ import { proposeAction } from "../engine/recommendations";
 import { raiseAlert } from "../notify";
 import { createTask } from "../tasks";
 import { seeded, startOfDay, titleCase } from "../utils";
+import { env, modes } from "../env";
+import { NotConfiguredError } from "../errors";
 
 /** Keyword rank checks + significant-drop detection (spec §39, §51). */
 export async function checkClientRanks(clientId: string) {
   const client = await db.client.findUniqueOrThrow({ where: { id: clientId }, include: { keywords: true, consent: true } });
   if (client.consent && !client.consent.rankTracking) return { skipped: "rank tracking not consented" };
+  if (env.live && !modes.serpLive()) throw new NotConfiguredError("SERP");
   const domain = client.website ?? `${client.slug}.example`;
   let drops = 0;
   for (const k of client.keywords) {
@@ -43,6 +46,7 @@ export async function runClientGrid(clientId: string, keyword?: string) {
   const centres = client.locations.filter((l) => l.latitude != null && l.longitude != null).map((l) => ({ locationId: l.id as string | null, lat: l.latitude!, lng: l.longitude! }));
   if (!centres.length && client.latitude != null && client.longitude != null) centres.push({ locationId: null, lat: client.latitude, lng: client.longitude });
   if (!centres.length) return { skipped: "no coordinates" };
+  if (env.live && !modes.serpLive()) throw new NotConfiguredError("SERP");
   const kws = keyword ? [keyword] : client.keywords.map((k) => k.phrase).slice(0, 2);
   const size = client.automation?.gridSize ?? 5;
   const radiusKm = client.automation?.gridRadiusKm ?? 8;
@@ -60,7 +64,8 @@ export async function runClientGrid(clientId: string, keyword?: string) {
 export async function analyzeCompetitors(clientId: string) {
   const client = await db.client.findUniqueOrThrow({ where: { id: clientId }, include: { competitors: true, knowledge: true, websites: { include: { pages: true } }, locations: { include: { services: true } } } });
   if (!client.competitors.length) return { skipped: "no competitors" };
-  for (const c of client.competitors) {
+  // Demo mode simulates competitor metrics; live mode never invents numbers (they come from manual entry / SERP data).
+  for (const c of env.live ? [] : client.competitors) {
     const r = seeded(`${c.id}:${new Date().toISOString().slice(0, 7)}`);
     const services = c.services.length ? c.services : (client.knowledge?.services ?? []).filter(() => r() > 0.3);
     await db.competitor.update({

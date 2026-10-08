@@ -55,7 +55,7 @@ export async function weeklyStrategy(clientId: string) {
   const weekOf = startOfWeek();
   const strat = await db.weeklyStrategy.upsert({
     where: { clientId_weekOf: { clientId, weekOf } },
-    create: { organizationId: brain.client.organizationId, clientId, weekOf, summary: result.data.summary, priorities: result.data.priorities.map((p, i) => ({ rank: i + 1, ...p })) as Prisma.InputJsonValue, inputs: signals as Prisma.InputJsonValue, generatedBy: result.mode === "LIVE" ? "AI" : "DEMO" },
+    create: { organizationId: brain.client.organizationId, clientId, weekOf, summary: result.data.summary, priorities: result.data.priorities.map((p, i) => ({ rank: i + 1, ...p })) as Prisma.InputJsonValue, inputs: signals as Prisma.InputJsonValue, generatedBy: result.mode === "LIVE" ? "AI" : "RULES" },
     update: { summary: result.data.summary, priorities: result.data.priorities.map((p, i) => ({ rank: i + 1, ...p })) as Prisma.InputJsonValue, inputs: signals as Prisma.InputJsonValue },
   });
   await activity({ organizationId: brain.client.organizationId, clientId, category: "AI", type: "strategy.weekly", title: "This week's SEO plan generated", detail: result.data.summary, actor: AI_ACTOR });

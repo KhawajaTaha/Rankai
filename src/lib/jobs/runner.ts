@@ -4,6 +4,7 @@ import { db } from "../db";
 import { raiseAlert, clientTeam, membersWithRole, notify } from "../notify";
 import { createTask } from "../tasks";
 import { ExecutionError } from "../engine/executor";
+import { INTEGRATION_HELP, NotConfiguredError } from "../errors";
 import { GoogleAuthError } from "../integrations/google-oauth";
 import { backoffMs, claimJobs, enqueue, recoverStaleJobs } from "./queue";
 import { HANDLERS } from "./handlers";
@@ -29,6 +30,13 @@ export async function runJob(run: AutomationRun) {
     });
   } catch (e) {
     const err = e as Error;
+    if (err instanceof NotConfiguredError) {
+      // Live mode, missing credentials: no retries, no per-client task spam — one org-level alert.
+      await db.automationRun.update({ where: { id: run.id }, data: { status: "CANCELLED", completedAt: new Date(), lastError: err.message, lockedAt: null, lockedBy: null } });
+      const help = INTEGRATION_HELP[err.integration];
+      await raiseAlert({ organizationId: run.organizationId, severity: "HIGH", type: "integration_not_configured", title: `${help.label} is not configured`, detail: `Automations that need it are paused. Add ${help.env} to the server environment (see Settings → Go-Live).`, dedupeKey: `not_configured:${err.integration}`, link: "/settings/go-live" });
+      return;
+    }
     const nonRetryable = (err instanceof ExecutionError && !err.retryable) || err instanceof GoogleAuthError;
     const exhausted = run.attempts >= run.maxAttempts || nonRetryable;
     if (!exhausted) {

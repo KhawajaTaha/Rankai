@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { env, modes } from "../env";
+import { NotConfiguredError } from "../errors";
 
 let client: Anthropic | null = null;
 function anthropic() {
@@ -29,8 +30,13 @@ export async function generateStructured<S extends z.ZodTypeAny>(args: {
   fallback: () => z.infer<S>;
   maxTokens?: number;
   effort?: "low" | "medium" | "high";
+  /** The fallback is computed from real data (not template content) and may be used in live mode. */
+  rulesFallbackOk?: boolean;
 }): Promise<AiResult<z.infer<S>>> {
-  if (!modes.aiLive()) return { data: args.schema.parse(args.fallback()), mode: "DEMO", model: "demo-generator" };
+  if (!modes.aiLive()) {
+    if (env.live && !args.rulesFallbackOk) throw new NotConfiguredError("AI");
+    return { data: args.schema.parse(args.fallback()), mode: "DEMO", model: "demo-generator" };
+  }
 
   const jsonSchema = z.toJSONSchema(args.schema, { target: "draft-7" }) as Record<string, unknown>;
   delete jsonSchema.$schema;
@@ -59,7 +65,8 @@ export async function generateText(args: {
   maxTokens?: number;
   effort?: "low" | "medium" | "high";
 }): Promise<AiResult<string>> {
-  if (!modes.aiLive()) return { data: args.fallback(), mode: "DEMO", model: "demo-generator" };
+  // Fallbacks here are rule-based answers computed from the client's real data, so they are allowed in live mode.
+  if (!modes.aiLive()) return { data: args.fallback(), mode: "DEMO", model: "rules-engine" };
   const response = await anthropic().beta.messages.create({
     model: env.aiModel,
     max_tokens: args.maxTokens ?? 8000,

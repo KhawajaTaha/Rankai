@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { env } from "@/lib/env";
 import { actorOf, fd, guarded, type ActionResult } from "@/lib/action-helpers";
 import { assertClientAccess } from "@/lib/tenancy";
 import { activity, audit } from "@/lib/audit";
@@ -429,7 +430,7 @@ export async function connectWebsiteAction(clientId: string, _p: ActionResult, f
     await assertClientAccess(ctx, clientId);
     const url = normalizeUrl(z.string().min(4).parse(fd.str(f, "url")));
     const kind = fd.str(f, "kind") === "WEBSITE_GENERIC" ? "WEBSITE_GENERIC" : "WEBSITE_WORDPRESS";
-    const demo = fd.bool(f, "demo");
+    const demo = !env.live && fd.bool(f, "demo");
     const secret = kind === "WEBSITE_WORDPRESS" ? fd.str(f, "secret") || randomToken(24) : null;
     const integration = await db.integration.upsert({
       where: { organizationId_clientId_kind: { organizationId: ctx.orgId, clientId, kind } },

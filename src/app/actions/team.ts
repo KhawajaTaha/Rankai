@@ -11,6 +11,7 @@ import { randomToken } from "@/lib/crypto";
 import { sendEmail } from "@/lib/email";
 import { env } from "@/lib/env";
 import { PERMISSIONS } from "@/lib/permissions";
+import { BRAND } from "@/lib/brand";
 
 async function createOrAttachUser(orgId: string, email: string, name: string, roleId: string, clientId: string | null, title?: string | null) {
   const temp = randomToken(9);
@@ -18,7 +19,7 @@ async function createOrAttachUser(orgId: string, email: string, name: string, ro
   if (!user) user = await db.user.create({ data: { email, name, passwordHash: await hashPassword(temp) } });
   if (await db.organizationUser.findUnique({ where: { organizationId_userId: { organizationId: orgId, userId: user.id } } })) throw new Error("That person is already a member");
   const member = await db.organizationUser.create({ data: { organizationId: orgId, userId: user.id, roleId, clientId, title } });
-  await sendEmail({ to: email, subject: "You've been invited to Local SEO Autopilot", text: `Hi ${name},\n\nYou've been given access. Sign in at ${env.appUrl}/login with this email and temporary password: ${temp}\n\nPlease change it after signing in.` });
+  await sendEmail({ to: email, subject: `You've been invited to ${BRAND.name}`, text: `Hi ${name},\n\nYou've been given access. Sign in at ${env.appUrl}/login with this email and temporary password: ${temp}\n\nPlease change it after signing in.` });
   return { member, temp };
 }
 

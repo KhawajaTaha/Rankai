@@ -24,7 +24,7 @@ export default async function PortalLayout({ children }: { children: React.React
   ];
   return (
     <div className="flex min-h-screen">
-      <Sidebar items={items} brand={client.name} sub={`Powered by ${ctx.org.whiteLabelName ?? ctx.org.name}`} />
+      <Sidebar items={items} logo={client.logoUrl ?? ctx.org.logoUrl} brand={client.name} sub={`Powered by ${ctx.org.whiteLabelName ?? ctx.org.name}`} />
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar name={ctx.user.name} role={ctx.roleName} unread={unread} items={items} showSearch={false} settingsHref="/portal/settings" />
         <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 lg:px-8">{children}</main>

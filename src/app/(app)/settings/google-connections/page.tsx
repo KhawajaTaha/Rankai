@@ -1,7 +1,7 @@
 import { requireStaff } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { clientWhere } from "@/lib/tenancy";
-import { modes } from "@/lib/env";
+import { env, modes } from "@/lib/env";
 import { Badge, Card, DemoBadge, EmptyState, PageHeader, StatusBadge, timeAgo } from "@/components/ui";
 import { ActionButton, ActionForm, SubmitButton } from "@/components/client";
 import { assignLocationFromCenterAction, connectGoogleAction, disconnectGoogleAction, syncConnectionAction, unassignLocationAction } from "@/app/actions/google";
@@ -20,7 +20,7 @@ export default async function GoogleConnectionsPage({ searchParams }: { searchPa
   return (
     <>
       <PageHeader title="Google Connections" subtitle="One agency Google account can manage many client profiles. Search, select and assign — duplicates are prevented." actions={can && <form action={connectGoogleAction.bind(null, "AGENCY_GBP", undefined)}><button className="btn-primary">+ Connect agency Google account</button></form>} />
-      {!modes.googleLive() && <div className="mb-4 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800">Google OAuth credentials are not configured — new connections are created in <b>Demo Mode</b> with realistic mocked locations. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET for live OAuth.</div>}
+      {!modes.googleLive() && <div className="mb-4 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800">{env.live ? <>Google OAuth is not configured yet. Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET — step-by-step in <a className="underline" href="/settings/go-live">Settings → Go-Live</a>.</> : <>Google OAuth credentials are not configured — new connections are created in <b>Demo Mode</b> with realistic mocked locations. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET for live OAuth.</>}</div>}
       {sp.error && <div className="mb-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">Google connection failed: {sp.error}</div>}
       {sp.connected && <div className="mb-4 rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800">Google account connected and locations retrieved.</div>}
       <div className="space-y-5">

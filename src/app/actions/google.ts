@@ -7,7 +7,7 @@ import { actorOf, fd, guarded, type ActionResult } from "@/lib/action-helpers";
 import { getCtx } from "@/lib/auth";
 import { assertClientAccess } from "@/lib/tenancy";
 import { audit } from "@/lib/audit";
-import { modes } from "@/lib/env";
+import { env, modes } from "@/lib/env";
 import { beginGoogleOAuth, revokeGoogleToken } from "@/lib/integrations/google-oauth";
 import { assignLocation, syncConnectionLocations, unassignLocation } from "@/lib/services/gbp";
 import { enqueue } from "@/lib/jobs/queue";
@@ -23,6 +23,7 @@ export async function connectGoogleAction(purpose: "AGENCY_GBP" | "CLIENT_GBP", 
     const url = await beginGoogleOAuth({ organizationId: ctx.orgId, userId: ctx.user.id, purpose, clientId, returnTo: purpose === "AGENCY_GBP" ? "/settings/google-connections" : ctx.isClientUser ? "/portal/google-business" : `/clients/${clientId}/gbp` });
     redirect(url);
   }
+  if (env.live) redirect(`${purpose === "AGENCY_GBP" ? "/settings/google-connections" : ctx.isClientUser ? "/portal/google-business" : `/clients/${clientId}/gbp`}?error=${encodeURIComponent("Google OAuth is not configured yet (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET) — see Settings → Go-Live")}`);
   // Demo mode: simulate the OAuth outcome with mocked data so the full workflow is usable.
   const email = purpose === "AGENCY_GBP" ? `agency-demo-${Date.now().toString(36)}@demo.example` : `client-demo-${clientId?.slice(-6)}@demo.example`;
   const conn = await db.googleConnection.create({ data: { organizationId: ctx.orgId, ownerType: purpose === "AGENCY_GBP" ? "AGENCY" : "CLIENT", clientId: purpose === "CLIENT_GBP" ? clientId : null, email, mode: "DEMO", status: "CONNECTED", scopes: ["business.manage"], connectedById: ctx.memberId } });

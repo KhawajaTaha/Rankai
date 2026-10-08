@@ -332,6 +332,7 @@ ${SAFETY_RULES}\n${brainToPrompt(b)}`,
     schema: StrategySchema,
     effort: "medium",
     fallback,
+    rulesFallbackOk: true,
   });
 }
 

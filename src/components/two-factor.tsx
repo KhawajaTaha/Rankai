@@ -15,7 +15,7 @@ export function TwoFactorSetup({ email }: { email: string }) {
       </div>
     );
   }
-  const uri = `otpauth://totp/Local%20SEO%20Autopilot:${encodeURIComponent(email)}?secret=${secret}&issuer=Local%20SEO%20Autopilot`;
+  const uri = `otpauth://totp/Top%20Tech%20Digital.AI:${encodeURIComponent(email)}?secret=${secret}&issuer=Top%20Tech%20Digital.AI`;
   return (
     <div className="space-y-3">
       <p className="text-sm text-ink-600">Add this key to your authenticator app, then enter the 6-digit code to confirm.</p>

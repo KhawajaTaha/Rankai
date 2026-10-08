@@ -38,7 +38,7 @@ export function AssistantPanel({ action, suggestions, placeholder, mode }: { act
         <input name="q" value={q} onChange={(e) => setQ(e.target.value)} className="input" placeholder={placeholder} required minLength={3} />
         <button className="btn-primary" disabled={pending}>Ask</button>
       </form>
-      {mode === "DEMO" && <p className="mt-2 text-[11px] text-ink-400">Demo Mode: answers are computed from this client&apos;s data without an AI model. Add ANTHROPIC_API_KEY for full AI answers.</p>}
+      {mode === "DEMO" && <p className="mt-2 text-[11px] text-ink-400">Rules mode: answers are computed directly from your data without an AI model. Add ANTHROPIC_API_KEY for full AI answers.</p>}
     </div>
   );
 }
