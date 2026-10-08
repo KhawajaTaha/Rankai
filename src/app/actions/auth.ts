@@ -78,3 +78,11 @@ export async function disableTotpAction(): Promise<ActionResult> {
   await audit({ organizationId: ctx.orgId, actor: { type: "HUMAN", userId: ctx.user.id, id: ctx.memberId }, action: "auth.2fa_disabled", source: "ui" });
   return { ok: true, message: "Two-factor authentication disabled." };
 }
+
+export async function revokeOtherSessionsAction(): Promise<ActionResult> {
+  const ctx = await getCtx();
+  if (!ctx) return { ok: false, error: "Not signed in" };
+  const r = await db.session.deleteMany({ where: { userId: ctx.user.id, NOT: { id: ctx.sessionId } } });
+  await audit({ organizationId: ctx.orgId, actor: { type: "HUMAN", userId: ctx.user.id, id: ctx.memberId }, action: "auth.sessions_revoked", newValue: { count: r.count }, source: "ui" });
+  return { ok: true, message: `Signed out ${r.count} other session(s)` };
+}

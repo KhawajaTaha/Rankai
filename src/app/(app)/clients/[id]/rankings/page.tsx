@@ -10,7 +10,7 @@ import { KeywordForm } from "@/components/forms";
 import { GridHeatmap } from "@/components/heatmap";
 import { addCompetitorAction, deleteKeywordAction, quickJobAction } from "@/app/actions/clients";
 
-export default async function ClientRankings({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ kw?: string }> }) {
+export default async function ClientRankings({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ kw?: string; loc?: string }> }) {
   const ctx = await requireStaff();
   const { id } = await params;
   const sp = await searchParams;
@@ -20,9 +20,13 @@ export default async function ClientRankings({ params, searchParams }: { params:
     db.localGridRun.findMany({ where: { clientId: id }, orderBy: { createdAt: "desc" }, take: 20 }),
     db.competitor.findMany({ where: { clientId: id }, orderBy: { avgRank: "asc" } }),
   ]);
-  const gridKeywords = [...new Set(grids.map((g) => g.keyword))];
+  const gridLocations = await db.gbpLocation.findMany({ where: { clientId: id, id: { in: [...new Set(grids.map((g) => g.locationId).filter(Boolean) as string[])] } }, select: { id: true, title: true, address: true } });
+  const loc = sp.loc && gridLocations.some((l) => l.id === sp.loc) ? sp.loc : gridLocations[0]?.id;
+  const locGrids = gridLocations.length ? grids.filter((g) => g.locationId === loc || g.locationId == null) : grids;
+  const gridKeywords = [...new Set(locGrids.map((g) => g.keyword))];
   const kw = sp.kw && gridKeywords.includes(sp.kw) ? sp.kw : gridKeywords[0];
-  const runs = grids.filter((g) => g.keyword === kw);
+  const runs = locGrids.filter((g) => g.keyword === kw);
+  const qs = (o: Record<string, string | undefined>) => `?${new URLSearchParams(Object.entries({ kw, loc, ...o }).filter(([, v]) => v) as [string, string][])}`;
   const cur = runs[0];
   const prev = runs[1];
   const ranked = keywords.filter((k) => k.currentPosition != null);
@@ -81,8 +85,11 @@ export default async function ClientRankings({ params, searchParams }: { params:
 
       <div className="grid gap-5 lg:grid-cols-3">
         <Card title="Local map grid" subtitle={cur ? `${cur.gridSize}×${cur.gridSize} grid · ${cur.radiusKm} km radius · ${fmtDate(cur.createdAt)}` : undefined} className="lg:col-span-2" actions={<>{cur?.source === "DEMO" && <DemoBadge />}{can && <ActionButton action={quickJobAction.bind(null, id, "grid")}>Run grid</ActionButton>}</>}>
+          {gridLocations.length > 1 && (
+            <div className="mb-2 flex flex-wrap gap-1.5">{gridLocations.map((l) => <a key={l.id} href={qs({ loc: l.id })} className={`rounded-full px-3 py-1 text-xs ring-1 ring-inset ${l.id === loc ? "bg-ink-800 text-white ring-ink-800" : "ring-ink-200"}`} title={l.address ?? ""}>{l.title}{l.address ? ` · ${l.address.split(",").slice(-2, -1)[0]?.trim() ?? ""}` : ""}</a>)}</div>
+          )}
           {gridKeywords.length > 1 && (
-            <div className="mb-4 flex flex-wrap gap-1.5">{gridKeywords.map((g) => <a key={g} href={`?kw=${encodeURIComponent(g)}`} className={`rounded-full px-3 py-1 text-xs ring-1 ring-inset ${g === kw ? "bg-brand-600 text-white ring-brand-600" : "ring-ink-200"}`}>{g}</a>)}</div>
+            <div className="mb-4 flex flex-wrap gap-1.5">{gridKeywords.map((g) => <a key={g} href={qs({ kw: g })} className={`rounded-full px-3 py-1 text-xs ring-1 ring-inset ${g === kw ? "bg-brand-600 text-white ring-brand-600" : "ring-ink-200"}`}>{g}</a>)}</div>
           )}
           {cur ? (
             <div className="flex flex-col gap-6 md:flex-row md:items-center">

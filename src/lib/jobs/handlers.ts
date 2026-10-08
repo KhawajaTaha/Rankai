@@ -15,6 +15,7 @@ import { archiveClient } from "../services/offboarding";
 import { refreshOnboarding } from "../services/onboarding";
 import { generateAiImage } from "../images/generate";
 import { runScheduler } from "./scheduler";
+import { runRetention } from "../services/maintenance";
 
 type Handler = (payload: Record<string, unknown>, run: AutomationRun) => Promise<unknown>;
 
@@ -54,5 +55,6 @@ export const HANDLERS: Record<string, { label: string; handler: Handler }> = {
   "watchdog.scan": { label: "Watchdog scan", handler: async (_p, run) => (await scanClients(run.organizationId, { act: true })).length },
   "health.update": { label: "Health score update", handler: (p, run) => updateHealth(s(p.clientId ?? run.clientId)) },
   "onboarding.refresh": { label: "Onboarding refresh", handler: (p, run) => refreshOnboarding(s(p.clientId ?? run.clientId)) },
+  "maintenance.retention": { label: "Data retention & housekeeping", handler: (_p, run) => runRetention(run.organizationId) },
   "client.archive": { label: "Archive client", handler: (p, run) => archiveClient(s(p.clientId ?? run.clientId)) },
 };

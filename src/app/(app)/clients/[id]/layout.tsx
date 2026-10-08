@@ -15,7 +15,7 @@ export default async function ClientLayout({ children, params }: { children: Rea
   const { id } = await params;
   const client = await getAccessibleClient(ctx, id);
   const [full, assigned, members, counts] = await Promise.all([
-    db.client.findUniqueOrThrow({ where: { id }, include: { automation: { select: { level: true } }, knowledge: { select: { services: true } }, locations: { include: { account: { include: { connection: true } } }, take: 1 }, integrations: true, package: true } }),
+    db.client.findUniqueOrThrow({ where: { id }, include: { automation: { select: { level: true } }, knowledge: { select: { services: true } }, locations: { include: { account: { include: { connection: true } } }, orderBy: { assignedAt: "asc" } }, integrations: true, package: true } }),
     clientAssignmentsMap([id]),
     db.organizationUser.findMany({ where: { organizationId: ctx.orgId, status: "ACTIVE", role: { isClientRole: false } }, include: { user: true } }),
     Promise.all([
@@ -30,7 +30,7 @@ export default async function ClientLayout({ children, params }: { children: Rea
   const website = full.integrations.find((i) => i.kind.startsWith("WEBSITE"));
   const sh = SUPPORT_HEALTH[client.supportHealth];
   const perms = Object.fromEntries(["add_calls", "add_notes", "create_tasks", "create_content", "run_audit", "manage_keywords", "generate_reports", "pause_automation"].map((p) => [p, ctx.can(p as never)]));
-  const anyDemo = loc?.account.connection.mode === "DEMO" || full.integrations.some((i) => i.mode === "DEMO");
+  const anyDemo = full.locations.some((l) => l.account.connection.mode === "DEMO") || full.integrations.some((i) => i.mode === "DEMO");
 
   return (
     <div>
@@ -52,7 +52,7 @@ export default async function ClientLayout({ children, params }: { children: Rea
                 {client.website && <a href={client.website} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 hover:text-brand-700"><Globe className="h-3.5 w-3.5" />{client.website.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "")}<ExternalLink className="h-3 w-3" /></a>}
               </div>
               <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-xs">
-                <span><span className="text-ink-400">GBP:</span> {loc ? <StatusBadge status={loc.account.connection.status} /> : <Link href={`/clients/${id}/gbp`} className="link">Connect</Link>}</span>
+                <span><span className="text-ink-400">GBP:</span> {loc ? <StatusBadge status={full.locations.some((l) => l.account.connection.status !== "CONNECTED") ? "ERROR" : "CONNECTED"} label={full.locations.length > 1 ? `${full.locations.length} locations` : undefined} /> : <Link href={`/clients/${id}/gbp`} className="link">Connect</Link>}</span>
                 <span><span className="text-ink-400">Website:</span> {website ? <StatusBadge status={website.status} /> : <Link href={`/clients/${id}/website`} className="link">Connect</Link>}</span>
                 <span><span className="text-ink-400">SEO:</span> {a.seo ?? "—"}</span>
                 <span><span className="text-ink-400">Support:</span> {a.support ?? "—"}</span>

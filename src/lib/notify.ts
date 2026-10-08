@@ -1,6 +1,8 @@
 import type { Severity } from "@prisma/client";
 import { db } from "./db";
 import { sendEmail } from "./email";
+import { env } from "./env";
+import { channelsFor, sendSms } from "./messaging";
 
 /**
  * Smart notifications:
@@ -35,10 +37,22 @@ export async function notify(args: {
       await db.notification.create({ data: { ...base(args, recipientId, severity), digestKey } });
     } else {
       await db.notification.create({ data: base(args, recipientId, severity) });
-      if (severity === "CRITICAL") {
-        const m = await db.organizationUser.findUnique({ where: { id: recipientId }, include: { user: true } });
-        if (m?.user.email) await sendEmail({ to: m.user.email, subject: `[Urgent] ${args.title}`, text: `${args.body ?? ""}\n\n${args.link ?? ""}` });
-      }
+      await deliverExternally(recipientId, severity, args);
+    }
+  }
+}
+
+/** Out-of-app delivery for HIGH/CRITICAL items according to each member's channel preferences. */
+async function deliverExternally(recipientId: string, severity: Severity, args: { title: string; body?: string; link?: string }) {
+  const m = await db.organizationUser.findUnique({ where: { id: recipientId }, include: { user: true } });
+  if (!m || m.status !== "ACTIVE") return;
+  const link = args.link ? new URL(args.link, env.appUrl).toString() : "";
+  for (const ch of channelsFor(m.notificationPrefs, severity)) {
+    try {
+      if (ch === "EMAIL" && m.user.email) await sendEmail({ to: m.user.email, subject: `${severity === "CRITICAL" ? "[Urgent] " : ""}${args.title}`, text: `${args.body ?? ""}\n\n${link}` });
+      if ((ch === "SMS" || ch === "WHATSAPP") && m.user.phone) await sendSms(m.user.phone, `${args.title}${link ? ` ${link}` : ""}`, ch);
+    } catch (e) {
+      console.error(`[notify] ${ch} delivery failed`, (e as Error).message);
     }
   }
 }

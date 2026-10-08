@@ -46,6 +46,7 @@ Every integration is a real service layer. Each one has connection state, encryp
 | Rank tracking / map grid | `SERP_PROVIDER=dataforseo` + login | Google organic + Maps positions, including per-grid-point coordinates |
 | WordPress | the connector plugin with a shared secret | HMAC-signed REST API (see `wordpress-plugin/`) |
 | Email | `SMTP_URL` | nodemailer |
+| SMS / WhatsApp alerts | `TWILIO_ACCOUNT_SID` + `TWILIO_AUTH_TOKEN` + `TWILIO_FROM` | Twilio REST API. Each member chooses channels per severity under Security & notifications |
 
 ---
 
@@ -102,7 +103,7 @@ PROTECTED actions are never automated. They always become manual tasks. These in
 
 The scheduler runs every 5 minutes. Dedupe keys make sure each daily, weekly and monthly flow runs exactly once per client and period:
 
-* **Daily:** GBP sync (connection, reviews, posts, metrics, unauthorized-change detection), website health checks (uptime, SSL, robots.txt, speed), content generation for upcoming slots, health score, follow-up reminders and escalation, and the no-work-forgotten watchdog.
+* **Daily:** data-retention purge (archived clients past the agency's retention window; nothing on Google or the website is touched), GBP sync (connection, reviews, posts, metrics, unauthorized-change detection), website health checks (uptime, SSL, robots.txt, speed), content generation for upcoming slots, health score, follow-up reminders and escalation, and the no-work-forgotten watchdog.
 * **Weekly:** rankings, map grid, Search Console opportunities, GA4, content calendar planning, competitor review, AI weekly strategy, and the weekly report.
 * **Monthly:** full website audit, full GBP audit, and the monthly report.
 
@@ -153,8 +154,11 @@ Failed jobs retry with exponential backoff. If the retries run out, the run is m
 | Command Center, execution history, automation success/ROI | `/automations` |
 | Client AI assistant and agency AI assistant | Client Overview, `/assistant` |
 | Global search, files with permissions, offboarding, audit log | top bar, Client → Files / Settings, `/audit-log` |
+| Multi-location clients (per-location posting cadence, city-aware posts, sync, audits, map grids) | Client → GBP location switcher / "+ Add location", Rankings grid |
+| Notification channels (in-app, email, SMS, WhatsApp per severity), session management | `/settings/security` |
+| Data retention purge and housekeeping (daily) | `services/maintenance.ts` |
 
-**Planned (Phase 5):** GoHighLevel, Twilio call automation, email inbox sync, billing and reseller. The integration layer and Integrations page are ready for them.
+**Planned (Phase 5):** GoHighLevel, Twilio call automation (SMS/WhatsApp alerts already ship), email inbox sync, billing and reseller. The integration layer and Integrations page are ready for them.
 
 ---
 

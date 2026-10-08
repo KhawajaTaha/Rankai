@@ -30,7 +30,7 @@ export function Topbar({ name, role, unread, items, searchAction = "/search", sh
             </span>
           </summary>
           <div className="absolute right-0 z-40 mt-2 w-56 rounded-2xl border border-ink-200 bg-white p-1.5 shadow-pop">
-            <Link href={settingsHref} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-ink-700 hover:bg-ink-50"><ShieldCheck className="h-4 w-4" /> Security & 2FA</Link>
+            <Link href={settingsHref} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-ink-700 hover:bg-ink-50"><ShieldCheck className="h-4 w-4" /> Security & notifications</Link>
             <form action={logoutAction}>
               <button className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-ink-700 hover:bg-ink-50"><LogOut className="h-4 w-4" /> Sign out</button>
             </form>

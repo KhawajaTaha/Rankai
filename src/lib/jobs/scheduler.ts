@@ -20,6 +20,7 @@ export async function runScheduler(now = new Date()) {
     // Agency-level daily jobs
     await q("support.reminders", org.id, null, `${day}:h${now.getUTCHours()}`, "Follow-up reminders & escalations");
     await q("watchdog.scan", org.id, null, day, "No-work-forgotten watchdog");
+    await q("maintenance.retention", org.id, null, day, "Data retention & housekeeping");
 
     const clients = await db.client.findMany({
       where: { organizationId: org.id, archivedAt: null, status: { in: ["ACTIVE", "ONBOARDING"] } },

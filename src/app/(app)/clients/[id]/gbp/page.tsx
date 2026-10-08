@@ -7,28 +7,31 @@ import { modes } from "@/lib/env";
 import { ACTIONS } from "@/lib/engine/risk";
 import { addDays, fmtNum } from "@/lib/utils";
 import { Badge, Card, DemoBadge, EmptyState, KeyValue, LineChart, ScoreRing, Stat, StatusBadge, Tabs, fmtDate, severityTone, timeAgo } from "@/components/ui";
-import { ActionButton, ActionForm, SubmitButton } from "@/components/client";
-import { assignLocationAction, connectGoogleAction, syncClientGbpAction } from "@/app/actions/google";
+import { ActionButton, ActionForm, Dialog, SubmitButton } from "@/components/client";
+import { assignLocationAction, connectGoogleAction, syncClientGbpAction, unassignLocationAction } from "@/app/actions/google";
 import { quickJobAction } from "@/app/actions/clients";
 import { pretty } from "@/lib/labels";
 
 const SUB = ["overview", "information", "categories", "services", "posts", "photos", "performance", "recommendations", "automation", "activity"];
 
-export default async function ClientGbp({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string; select?: string }> }) {
+export default async function ClientGbp({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string; select?: string; loc?: string }> }) {
   const ctx = await requireStaff();
   const { id } = await params;
   const sp = await searchParams;
   const client = await getAccessibleClient(ctx, id);
-  const loc = await db.gbpLocation.findFirst({ where: { clientId: id }, include: { account: { include: { connection: true } }, services: true, categories: true } });
+  const locations = await db.gbpLocation.findMany({ where: { clientId: id }, orderBy: { assignedAt: "asc" }, include: { account: { include: { connection: true } }, services: true, categories: true } });
+  const loc = locations.find((l) => l.id === sp.loc) ?? locations[0];
   const tab = SUB.includes(sp.tab ?? "") ? sp.tab! : "overview";
+  const candidates = ctx.can("connect_gbp")
+    ? await db.gbpLocation.findMany({
+        where: { organizationId: ctx.orgId, clientId: null, account: { connection: { status: "CONNECTED", ...(sp.select ? { id: sp.select } : {}) } } },
+        include: { account: { include: { connection: { select: { email: true, mode: true } } } } },
+        orderBy: { title: "asc" },
+      })
+    : [];
+  const sorted = candidates.sort((a, b) => Number(b.title.toLowerCase().includes(client.name.toLowerCase().split(" ")[0]!)) - Number(a.title.toLowerCase().includes(client.name.toLowerCase().split(" ")[0]!)));
 
   if (!loc) {
-    const candidates = await db.gbpLocation.findMany({
-      where: { organizationId: ctx.orgId, clientId: null, account: { connection: { status: "CONNECTED", ...(sp.select ? { id: sp.select } : {}) } } },
-      include: { account: { include: { connection: { select: { email: true, mode: true } } } } },
-      orderBy: { title: "asc" },
-    });
-    const sorted = candidates.sort((a, b) => Number(b.title.toLowerCase().includes(client.name.toLowerCase().split(" ")[0]!)) - Number(a.title.toLowerCase().includes(client.name.toLowerCase().split(" ")[0]!)));
     return (
       <div className="grid gap-5 lg:grid-cols-2">
         <Card title="Method A — Client connects their own GBP" subtitle="The client clicks Connect Google Business Profile in their portal and approves access.">
@@ -73,9 +76,29 @@ export default async function ClientGbp({ params, searchParams }: { params: Prom
   const sum = (k: "impressionsMaps" | "impressionsSearch" | "calls" | "websiteClicks" | "directionRequests") => last30.reduce((s, m) => s + m[k], 0);
   const breakdown = (audit?.breakdown ?? {}) as Record<string, number>;
   const base = `/clients/${id}/gbp`;
+  const locQ = locations.length > 1 ? `&loc=${loc.id}` : "";
 
   return (
     <div className="space-y-5">
+      {(locations.length > 1 || (ctx.can("connect_gbp") && sorted.length > 0)) && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-medium text-ink-500">{locations.length} location{locations.length > 1 ? "s" : ""}:</span>
+          {locations.map((l) => (
+            <Link key={l.id} href={`${base}?tab=${tab}&loc=${l.id}`} className={`rounded-full px-3 py-1 text-xs ring-1 ring-inset ${l.id === loc.id ? "bg-brand-600 text-white ring-brand-600" : "bg-white ring-ink-200 hover:bg-ink-50"}`}>{l.title}{l.address ? ` · ${l.address.split(",").slice(-2, -1)[0]?.trim() ?? ""}` : ""}</Link>
+          ))}
+          {ctx.can("connect_gbp") && sorted.length > 0 && (
+            <Dialog trigger="+ Add location" title="Add another GBP location" description="Multi-location clients get per-location posting, syncing, audits and map grids" triggerClassName="btn-secondary btn-sm">
+              <ActionForm action={assignLocationAction.bind(null, id)} className="space-y-3">
+                <select name="locationId" className="input" size={Math.min(8, sorted.length)}>
+                  {sorted.map((l) => <option key={l.id} value={l.id}>{l.title} — {l.address ?? ""} ({l.account.connection.email}{l.account.connection.mode === "DEMO" ? ", demo" : ""})</option>)}
+                </select>
+                <SubmitButton>Assign to {client.name}</SubmitButton>
+              </ActionForm>
+            </Dialog>
+          )}
+          {ctx.can("connect_gbp") && locations.length > 1 && <ActionButton action={unassignLocationAction.bind(null, loc.id)} className="btn-ghost btn-sm" confirm={`Remove ${loc.title} from this client? The Google profile itself is not changed.`}>Remove this location</ActionButton>}
+        </div>
+      )}
       <div className="card flex flex-col gap-4 p-5 md:flex-row md:items-center">
         <ScoreRing score={client.gbpScore} size={72} label="GBP score" />
         <div className="flex-1">
@@ -91,7 +114,7 @@ export default async function ClientGbp({ params, searchParams }: { params: Prom
           {ctx.can("run_audit") && <ActionButton action={quickJobAction.bind(null, id, "gbp_audit")} className="btn-primary btn-sm">Run GBP Audit</ActionButton>}
         </div>
       </div>
-      <Tabs active={`${base}?tab=${tab}`} tabs={SUB.map((s) => ({ href: `${base}?tab=${s}`, label: s.charAt(0).toUpperCase() + s.slice(1) }))} />
+      <Tabs active={`${base}?tab=${tab}${locQ}`} tabs={SUB.map((s) => ({ href: `${base}?tab=${s}${locQ}`, label: s.charAt(0).toUpperCase() + s.slice(1) }))} />
 
       {tab === "overview" && (
         <div className="grid gap-5 lg:grid-cols-3">

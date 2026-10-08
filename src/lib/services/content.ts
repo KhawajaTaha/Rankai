@@ -15,35 +15,36 @@ import { env } from "../env";
  * preferred days/time and blogs on blog days, rotating categories and services.
  */
 export async function planCalendar(clientId: string, weeks = 4) {
-  const client = await db.client.findUniqueOrThrow({ where: { id: clientId }, include: { automation: true, consent: true, locations: { take: 1 } } });
+  const client = await db.client.findUniqueOrThrow({ where: { id: clientId }, include: { automation: true, consent: true, locations: { orderBy: { assignedAt: "asc" }, select: { id: true } } } });
   const s = client.automation;
   if (!s || client.automationPaused || ["OFFBOARDING", "ARCHIVED", "PAUSED"].includes(client.status)) return { planned: 0 };
   const brain = await loadBrain(clientId);
   const horizon = addDays(startOfDay(), weeks * 7);
-  const existing = await db.contentItem.findMany({ where: { clientId, scheduledFor: { gte: startOfDay(), lte: horizon }, status: { notIn: ["REJECTED"] } }, select: { type: true, scheduledFor: true } });
-  const taken = new Set(existing.map((e) => `${e.type}:${e.scheduledFor?.toISOString().slice(0, 10)}`));
+  const existing = await db.contentItem.findMany({ where: { clientId, scheduledFor: { gte: startOfDay(), lte: horizon }, status: { notIn: ["REJECTED"] } }, select: { type: true, scheduledFor: true, locationId: true } });
+  const taken = new Set(existing.map((e) => `${e.type}:${e.locationId ?? ""}:${e.scheduledFor?.toISOString().slice(0, 10)}`));
   const [hh, mm] = s.postTime.split(":").map(Number) as [number, number];
   let planned = 0;
   const cats = s.contentCategories.length ? s.contentCategories : ["Service", "Educational"];
   let catIdx = brain.recentContent.filter((c) => c.type === "GBP_POST").length;
   const servicesUsed: string[] = [];
 
-  if (s.gbpPostingEnabled && s.postsPerWeek > 0 && client.locations.length) {
+  // Multi-location clients: each GBP location gets its own posting cadence.
+  for (const loc of s.gbpPostingEnabled && s.postsPerWeek > 0 ? client.locations : []) {
     for (let d = 1; d <= weeks * 7; d++) {
       const day = addDays(startOfDay(), d);
       if (!s.postDays.includes(day.getDay())) continue;
       const weekStart = addDays(day, -((day.getDay() + 6) % 7));
-      const inWeek = existing.filter((e) => e.type === "GBP_POST" && e.scheduledFor && e.scheduledFor >= weekStart && e.scheduledFor < addDays(weekStart, 7)).length;
+      const inWeek = existing.filter((e) => e.type === "GBP_POST" && (e.locationId ?? loc.id) === loc.id && e.scheduledFor && e.scheduledFor >= weekStart && e.scheduledFor < addDays(weekStart, 7)).length;
       if (inWeek >= s.postsPerWeek) continue;
-      const key = `GBP_POST:${day.toISOString().slice(0, 10)}`;
+      const key = `GBP_POST:${loc.id}:${day.toISOString().slice(0, 10)}`;
       if (taken.has(key)) continue;
       const when = new Date(day);
       when.setHours(hh, mm, 0, 0);
       const category = cats[catIdx++ % cats.length]!;
       const service = pickService({ ...brain, recentContent: [...brain.recentContent, ...servicesUsed.map((sv) => ({ servicePromoted: sv, createdAt: new Date() }) as never)] });
       servicesUsed.push(service);
-      await db.contentItem.create({ data: { organizationId: client.organizationId, clientId, locationId: client.locations[0]!.id, type: "GBP_POST", status: "IDEA", title: `${category} post: ${service}`, category, servicePromoted: service, scheduledFor: when, generatedBy: "AUTOMATION" } });
-      existing.push({ type: "GBP_POST", scheduledFor: when });
+      await db.contentItem.create({ data: { organizationId: client.organizationId, clientId, locationId: loc.id, type: "GBP_POST", status: "IDEA", title: `${category} post: ${service}`, category, servicePromoted: service, scheduledFor: when, generatedBy: "AUTOMATION" } });
+      existing.push({ type: "GBP_POST", scheduledFor: when, locationId: loc.id });
       taken.add(key);
       planned++;
     }
@@ -54,13 +55,13 @@ export async function planCalendar(clientId: string, weeks = 4) {
     for (let d = 3; d <= weeks * 7 && budget > 0; d++) {
       const day = addDays(startOfDay(), d);
       if (!(s.blogDays.length ? s.blogDays : [2]).includes(day.getDay())) continue;
-      if (taken.has(`BLOG:${day.toISOString().slice(0, 10)}`)) continue;
+      if (taken.has(`BLOG::${day.toISOString().slice(0, 10)}`)) continue;
       if (d < 7 * (planned ? 1 : 0)) continue;
       const when = new Date(day);
       when.setHours(9, 0, 0, 0);
       const service = s.blogTargetServices[0] ?? pickService(brain);
       await db.contentItem.create({ data: { organizationId: client.organizationId, clientId, type: "BLOG", status: "IDEA", title: `Blog: ${service}`, servicePromoted: service, scheduledFor: when, generatedBy: "AUTOMATION" } });
-      taken.add(`BLOG:${day.toISOString().slice(0, 10)}`);
+      taken.add(`BLOG::${day.toISOString().slice(0, 10)}`);
       budget--;
       planned++;
       d += Math.floor(7 / Math.max(perWeek, 0.25)) - 1;
@@ -76,7 +77,13 @@ export async function generateContent(itemId: string, actor: Actor = AI_ACTOR) {
   if (["PUBLISHED", "PUBLISHING", "REJECTED"].includes(item.status)) return { skipped: item.status };
   const client = item.client;
   const s = client.automation;
-  const brain = await loadBrain(client.id);
+  let brain = await loadBrain(client.id);
+  if (item.locationId) {
+    // Multi-location: write for the specific location's city.
+    const loc = await db.gbpLocation.findUnique({ where: { id: item.locationId }, select: { address: true } });
+    const city = locationCity(loc?.address);
+    if (city) brain = { ...brain, city };
+  }
   await db.contentItem.update({ where: { id: item.id }, data: { status: "GENERATING", attempts: { increment: 1 } } });
 
   let data: Prisma.ContentItemUpdateInput;
@@ -207,6 +214,14 @@ async function publishBlog(item: ContentItem & { image: { url: string; altText?:
   const check = await wp.getPost(post.id);
   if (!check || !["publish", "future"].includes(check.status)) throw new Error("Blog was created but verification failed");
   return { externalId: String(post.id), externalUrl: post.url };
+}
+
+/** "120 Main St, Thunder Bay, ON" → "Thunder Bay". */
+export function locationCity(address: string | null | undefined) {
+  const parts = (address ?? "").split(",").map((p) => p.trim()).filter(Boolean);
+  if (parts.length < 2) return null;
+  const last = parts[parts.length - 1]!;
+  return /^[A-Z]{2}( [A-Z0-9 ]+)?$/.test(last) && parts.length >= 3 ? parts[parts.length - 2]! : last;
 }
 
 /** Minimal, safe Markdown → HTML for publishing (headings, paragraphs, lists, links, bold/italic). */

@@ -11,11 +11,12 @@ export const metadata = { title: "Google Business" };
 export default async function PortalGbp() {
   const ctx = await requirePortal();
   const id = ctx.portalClientId;
-  const [client, loc, posts] = await Promise.all([
+  const [client, locations, posts] = await Promise.all([
     db.client.findUniqueOrThrow({ where: { id } }),
-    db.gbpLocation.findFirst({ where: { clientId: id }, include: { account: { include: { connection: true } } } }),
+    db.gbpLocation.findMany({ where: { clientId: id }, orderBy: { assignedAt: "asc" }, include: { account: { include: { connection: true } } } }),
     db.gbpPost.findMany({ where: { clientId: id }, orderBy: { publishedAt: "desc" }, take: 6 }),
   ]);
+  const loc = locations[0];
   if (!loc) {
     const own = await db.gbpLocation.findMany({ where: { organizationId: ctx.orgId, clientId: null, account: { connection: { clientId: id, status: "CONNECTED" } } } });
     return (
@@ -40,10 +41,14 @@ export default async function PortalGbp() {
   }
   return (
     <>
-      <PageHeader title="Google Business Profile" subtitle={<span className="inline-flex items-center gap-2">{loc.title} <StatusBadge status={loc.account.connection.status} /> {loc.account.connection.mode === "DEMO" && <DemoBadge />}</span>} />
+      <PageHeader title="Google Business Profile" subtitle={<span className="inline-flex items-center gap-2">{locations.length > 1 ? `${locations.length} locations` : loc.title} <StatusBadge status={loc.account.connection.status} /> {loc.account.connection.mode === "DEMO" && <DemoBadge />}</span>} />
       <div className="grid gap-5 lg:grid-cols-3">
         <Card title="Profile score"><div className="flex items-center gap-4"><ScoreRing score={client.gbpScore} size={72} /><p className="text-sm text-ink-600">We keep your profile complete, active and responsive so more local customers find you.</p></div></Card>
-        <Card title="Your listing" className="lg:col-span-2"><KeyValue items={[{ label: "Name", value: loc.title }, { label: "Category", value: loc.primaryCategory }, { label: "Phone", value: loc.phone }, { label: "Website", value: loc.websiteUri }, { label: "Address", value: loc.address }, { label: "Last updated", value: fmtDate(loc.lastSyncAt) }]} /><p className="mt-3 text-sm text-ink-600">{loc.description}</p></Card>
+        <div className="space-y-5 lg:col-span-2">
+          {locations.map((l) => (
+            <Card key={l.id} title={locations.length > 1 ? l.title : "Your listing"}><KeyValue items={[{ label: "Name", value: l.title }, { label: "Category", value: l.primaryCategory }, { label: "Phone", value: l.phone }, { label: "Website", value: l.websiteUri }, { label: "Address", value: l.address }, { label: "Last updated", value: fmtDate(l.lastSyncAt) }]} /><p className="mt-3 text-sm text-ink-600">{l.description}</p></Card>
+          ))}
+        </div>
         <Card title="Recent posts" className="lg:col-span-3" pad={false}><ul className="divide-y divide-ink-100">{posts.map((p) => <li key={p.id} className="px-5 py-3 text-sm"><p className="line-clamp-2 text-ink-700">{p.summary}</p><div className="text-xs text-ink-400">{fmtDate(p.publishedAt)}</div></li>)}</ul></Card>
       </div>
     </>

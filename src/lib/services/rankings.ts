@@ -38,19 +38,22 @@ export async function checkClientRanks(clientId: string) {
 
 /** Local map grid run for the client's top keywords (spec §40). */
 export async function runClientGrid(clientId: string, keyword?: string) {
-  const client = await db.client.findUniqueOrThrow({ where: { id: clientId }, include: { automation: true, keywords: { orderBy: { createdAt: "asc" }, take: 3 }, locations: { take: 1 } } });
-  const lat = client.latitude ?? client.locations[0]?.latitude;
-  const lng = client.longitude ?? client.locations[0]?.longitude;
-  if (lat == null || lng == null) return { skipped: "no coordinates" };
+  const client = await db.client.findUniqueOrThrow({ where: { id: clientId }, include: { automation: true, keywords: { orderBy: { createdAt: "asc" }, take: 3 }, locations: { orderBy: { assignedAt: "asc" }, select: { id: true, title: true, latitude: true, longitude: true } } } });
+  // One grid centre per GBP location (multi-location clients); fall back to the client's own coordinates.
+  const centres = client.locations.filter((l) => l.latitude != null && l.longitude != null).map((l) => ({ locationId: l.id as string | null, lat: l.latitude!, lng: l.longitude! }));
+  if (!centres.length && client.latitude != null && client.longitude != null) centres.push({ locationId: null, lat: client.latitude, lng: client.longitude });
+  if (!centres.length) return { skipped: "no coordinates" };
   const kws = keyword ? [keyword] : client.keywords.map((k) => k.phrase).slice(0, 2);
   const size = client.automation?.gridSize ?? 5;
   const radiusKm = client.automation?.gridRadiusKm ?? 8;
-  for (const kw of kws) {
-    const g = await runGrid({ keyword: kw, lat, lng, size, radiusKm, seed: clientId, domain: client.website ?? undefined });
-    await db.localGridRun.create({ data: { organizationId: client.organizationId, clientId, keyword: kw, gridSize: size, radiusKm, centerLat: lat, centerLng: lng, points: g.points as unknown as Prisma.InputJsonValue, avgPosition: g.avgPosition, top3Coverage: g.top3Coverage, top10Coverage: g.top10Coverage, shareOfVoice: g.shareOfVoice, source: g.source } });
+  for (const c of centres) {
+    for (const kw of kws) {
+      const g = await runGrid({ keyword: kw, lat: c.lat, lng: c.lng, size, radiusKm, seed: `${clientId}:${c.locationId ?? ""}`, domain: client.website ?? undefined });
+      await db.localGridRun.create({ data: { organizationId: client.organizationId, clientId, locationId: c.locationId, keyword: kw, gridSize: size, radiusKm, centerLat: c.lat, centerLng: c.lng, points: g.points as unknown as Prisma.InputJsonValue, avgPosition: g.avgPosition, top3Coverage: g.top3Coverage, top10Coverage: g.top10Coverage, shareOfVoice: g.shareOfVoice, source: g.source } });
+    }
   }
-  await activity({ organizationId: client.organizationId, clientId, category: "SEO", type: "grid.run", title: `Local map grid updated (${kws.length} keyword${kws.length > 1 ? "s" : ""})`, actor: SYSTEM_ACTOR });
-  return { keywords: kws.length };
+  await activity({ organizationId: client.organizationId, clientId, category: "SEO", type: "grid.run", title: `Local map grid updated (${kws.length} keyword${kws.length > 1 ? "s" : ""}${centres.length > 1 ? `, ${centres.length} locations` : ""})`, actor: SYSTEM_ACTOR });
+  return { keywords: kws.length, locations: centres.length };
 }
 
 /** Competitor refresh + gap detection (spec §41). */

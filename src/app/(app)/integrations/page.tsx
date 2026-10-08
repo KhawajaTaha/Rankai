@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { requireStaff } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { modes } from "@/lib/env";
+import { messagingLive } from "@/lib/messaging";
 import { Badge, Card, DemoBadge, PageHeader, StatusBadge, timeAgo } from "@/components/ui";
 import { ActionButton } from "@/components/client";
 import { disconnectIntegrationAction } from "@/app/actions/clients";
@@ -23,7 +24,8 @@ export default async function IntegrationsPage() {
     { name: "AI image generation", live: modes.imagesLive(), env: "IMAGE_PROVIDER / IMAGE_API_KEY", desc: "Brand-safe promotional images" },
     { name: "SERP / rank tracking", live: modes.serpLive(), env: "SERP_PROVIDER / SERP_API_LOGIN", desc: "Keyword rankings, local map grid, competitors" },
     { name: "Email (SMTP)", live: Boolean(process.env.SMTP_URL), env: "SMTP_URL", desc: "Report delivery and critical alerts" },
-    { name: "GoHighLevel, Twilio, billing", live: false, env: "Phase 5", desc: "Planned integrations — architecture ready" },
+    { name: "SMS & WhatsApp alerts (Twilio)", live: messagingLive(), env: "TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_FROM", desc: "Critical/high alerts per member channel preferences" },
+    { name: "GoHighLevel, call automation, billing", live: false, env: "Phase 5", desc: "Planned integrations — architecture ready" },
   ];
   return (
     <>

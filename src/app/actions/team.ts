@@ -83,3 +83,20 @@ export async function saveRoleAction(_p: ActionResult, f: FormData): Promise<Act
     return { ok: true, message: "Role saved" };
   });
 }
+
+export async function updateNotificationPrefsAction(_p: ActionResult, f: FormData): Promise<ActionResult> {
+  return guarded([], async (ctx) => {
+    const { normalizePhone } = await import("@/lib/messaging");
+    const rawPhone = fd.str(f, "phone");
+    const phone = rawPhone ? normalizePhone(rawPhone) : null;
+    if (rawPhone && !phone) throw new Error("Enter a valid phone number, e.g. +1 807 555 0100");
+    const prefs: Record<string, string[]> = {};
+    for (const sev of ["CRITICAL", "HIGH"]) prefs[sev] = ["IN_APP", ...fd.all(f, sev).filter((c) => ["EMAIL", "SMS", "WHATSAPP"].includes(c))];
+    if ((prefs.CRITICAL!.includes("SMS") || prefs.CRITICAL!.includes("WHATSAPP") || prefs.HIGH!.includes("SMS") || prefs.HIGH!.includes("WHATSAPP")) && !phone) throw new Error("Add a phone number to receive SMS or WhatsApp alerts");
+    await db.user.update({ where: { id: ctx.user.id }, data: { phone } });
+    await db.organizationUser.update({ where: { id: ctx.memberId }, data: { notificationPrefs: prefs } });
+    await audit({ organizationId: ctx.orgId, actor: actorOf(ctx), action: "notification_prefs.update", newValue: prefs, source: "ui" });
+    revalidatePath("/settings/security");
+    return { ok: true, message: "Notification preferences saved" };
+  });
+}

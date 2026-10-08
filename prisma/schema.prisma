@@ -423,6 +423,8 @@ model OrganizationUser {
   grantedPermissions  String[]      @default([])
   revokedPermissions  String[]      @default([])
   dashboardLayout     Json?
+  // Delivery channels per severity, e.g. {"CRITICAL":["IN_APP","EMAIL","SMS"],"HIGH":["IN_APP","EMAIL"]}
+  notificationPrefs   Json?
   managerId           String?
   createdAt           DateTime      @default(now())
 
@@ -1436,6 +1438,7 @@ model LocalGridRun {
   id             String   @id @default(cuid())
   organizationId String
   clientId       String
+  locationId     String?  // grid centred on this GBP location (multi-location clients)
   keyword        String
   gridSize       Int
   radiusKm       Float

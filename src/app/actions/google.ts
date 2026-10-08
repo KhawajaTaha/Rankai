@@ -60,8 +60,11 @@ export async function assignLocationFromCenterAction(_p: ActionResult, f: FormDa
 
 export async function unassignLocationAction(locationId: string) {
   return guarded(["connect_gbp"], async (ctx) => {
+    const loc = await db.gbpLocation.findFirst({ where: { id: locationId, organizationId: ctx.orgId }, select: { clientId: true } });
+    if (loc?.clientId) await assertClientAccess(ctx, loc.clientId);
     await unassignLocation({ organizationId: ctx.orgId, locationId, actor: actorOf(ctx) });
     revalidatePath("/settings/google-connections");
+    if (loc?.clientId) revalidatePath(`/clients/${loc.clientId}`, "layout");
   });
 }
 
