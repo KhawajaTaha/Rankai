@@ -29,7 +29,7 @@ export default async function IntegrationsPage() {
   ];
   return (
     <>
-      <PageHeader title="Integrations" subtitle="Every integration has connection state, encrypted credentials, sync jobs, retries, last sync, reconnect & disconnect" />
+      <PageHeader title="Integrations" subtitle="Every integration has connection state, encrypted credentials, sync jobs, retries, last sync, reconnect & disconnect" actions={<Link href="/settings/go-live" className="btn-primary">Go-live setup &amp; costs</Link>} />
       <Card title="Platform providers" subtitle="Without credentials, the platform runs that integration in clearly labelled Demo Mode with realistic mocked data" pad={false}>
         <ul className="divide-y divide-ink-100">
           {providers.map((p) => (

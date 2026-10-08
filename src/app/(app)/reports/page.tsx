@@ -6,6 +6,7 @@ import { Card, EmptyState, PageHeader, StatusBadge, fmtDate } from "@/components
 import { ActionForm, Field, SubmitButton } from "@/components/client";
 import { generateReportAction } from "@/app/actions/ops";
 import { pretty } from "@/lib/labels";
+import { ReportDownloadForm, ReportFileLinks } from "@/components/report-download";
 
 export const metadata = { title: "Reports" };
 
@@ -22,7 +23,7 @@ export default async function ReportsPage() {
       <div className="grid gap-5 lg:grid-cols-3">
         <Card title="Recent reports" className="lg:col-span-2" pad={false}>
           <table className="w-full">
-            <thead className="bg-ink-50/60"><tr>{["Report", "Client", "Period", "Delivery", "Status"].map((h) => <th key={h} className="th">{h}</th>)}</tr></thead>
+            <thead className="bg-ink-50/60"><tr>{["Report", "Client", "Period", "Delivery", "Status", "Download"].map((h) => <th key={h} className="th">{h}</th>)}</tr></thead>
             <tbody>
               {reports.map((r) => (
                 <tr key={r.id} className="tr">
@@ -31,11 +32,16 @@ export default async function ReportsPage() {
                   <td className="td text-xs">{fmtDate(r.periodStart)} – {fmtDate(r.periodEnd)}</td>
                   <td className="td text-xs">{r.sentAt ? `Emailed ${fmtDate(r.sentAt)}` : "Portal"}</td>
                   <td className="td"><StatusBadge status={r.status} /></td>
+                  <td className="td">{(r.status === "READY" || r.status === "SENT") && <ReportFileLinks reportId={r.id} compact />}</td>
                 </tr>
               ))}
             </tbody>
           </table>
           {!reports.length && <EmptyState title="No reports yet" />}
+        </Card>
+        <div className="space-y-5">
+        <Card title="Download report" subtitle="Pick a client and period — default last 30 days">
+          <ReportDownloadForm clients={clients} />
         </Card>
         {ctx.can("generate_reports") && (
           <Card title="Generate a report">
@@ -48,6 +54,7 @@ export default async function ReportsPage() {
             </ActionForm>
           </Card>
         )}
+        </div>
       </div>
     </>
   );

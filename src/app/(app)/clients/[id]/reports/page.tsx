@@ -6,6 +6,7 @@ import { Card, EmptyState, StatusBadge, fmtDate } from "@/components/ui";
 import { ActionForm, Field, SubmitButton } from "@/components/client";
 import { generateReportAction } from "@/app/actions/ops";
 import { pretty } from "@/lib/labels";
+import { ReportDownloadForm, ReportFileLinks } from "@/components/report-download";
 
 export default async function ClientReports({ params }: { params: Promise<{ id: string }> }) {
   const ctx = await requireStaff();
@@ -22,6 +23,7 @@ export default async function ClientReports({ params }: { params: Promise<{ id: 
                 <Link href={`/reports/${r.id}`} className="text-sm font-medium hover:text-brand-700">{r.title}</Link>
                 <div className="text-xs text-ink-500">{fmtDate(r.periodStart)} – {fmtDate(r.periodEnd)} · {r.sentTo.length ? `sent to ${r.sentTo.join(", ")}` : r.clientVisible ? "in client portal" : "internal"}</div>
               </div>
+              {(r.status === "READY" || r.status === "SENT") && <ReportFileLinks reportId={r.id} compact />}
               <StatusBadge status={r.status} />
             </li>
           ))}
@@ -29,6 +31,9 @@ export default async function ClientReports({ params }: { params: Promise<{ id: 
         {!reports.length && <EmptyState title="No reports yet" />}
       </Card>
       <div className="space-y-5">
+        <Card title="Download report" subtitle="Last 30 days or any period you choose">
+          <ReportDownloadForm clientId={id} />
+        </Card>
         {ctx.can("generate_reports") && (
           <Card title="Generate report">
             <ActionForm action={generateReportAction} className="space-y-3">

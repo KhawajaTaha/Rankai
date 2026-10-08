@@ -39,7 +39,7 @@ export default async function SettingsPage() {
   );
   return (
     <>
-      <PageHeader title="Settings" actions={<><Link href="/settings/google-connections" className="btn-secondary">Google Connections</Link><Link href="/settings/security" className="btn-secondary">Security & 2FA</Link>{ctx.can("view_audit_log") && <Link href="/audit-log" className="btn-secondary">Audit log</Link>}</>} />
+      <PageHeader title="Settings" actions={<><Link href="/settings/go-live" className="btn-primary">Go live</Link><Link href="/settings/google-connections" className="btn-secondary">Google Connections</Link><Link href="/settings/security" className="btn-secondary">Security & 2FA</Link>{ctx.can("view_audit_log") && <Link href="/audit-log" className="btn-secondary">Audit log</Link>}</>} />
       <div className="grid gap-5 lg:grid-cols-2">
         <Card title="Agency" subtitle="White label, safety thresholds and retention">
           <ActionForm action={updateOrgAction} resetOnSuccess={false} className="grid gap-3 sm:grid-cols-2">

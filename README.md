@@ -1,4 +1,4 @@
-# AI Local SEO Autopilot
+# Top Tech Digital.AI — Local SEO Autopilot
 
 A multi-tenant agency platform for Local SEO automation. It combines Google Business Profile management, website SEO, AI content and images, rank tracking, a support CRM, approvals, reporting and a workflow engine.
 
@@ -33,6 +33,30 @@ Demo accounts all use the password `Autopilot!2026` (override it with `SEED_PASS
 | `staff@superiorcustomgranite.example` | Client Staff (restricted portal) |
 
 **Production:** run `npm run build && npm start` with `RUN_WORKER_IN_PROCESS=false`. Then run one or more `npm run worker` processes. `docker compose up` starts Postgres, the app and two workers. On serverless hosts, call `POST /api/cron` every minute with `Authorization: Bearer $CRON_SECRET`.
+
+### Going live (production)
+
+1. Get a small VPS (2 GB RAM, ≈ $5–7/month) and point a domain's A record at it.
+2. `cp .env.example .env`, then fill it in:
+   * `APP_MODE=live`
+   * `DOMAIN`, `APP_URL=https://…`
+   * `POSTGRES_PASSWORD`, `ENCRYPTION_KEY`, `SESSION_SECRET`, `CRON_SECRET`
+   * `ANTHROPIC_API_KEY`, `GOOGLE_CLIENT_ID`/`SECRET`
+   * Recommended: `SERP_*`, `SMTP_URL`
+3. `docker compose -f docker-compose.prod.yml up -d --build`. This starts Postgres, the app, the worker and Caddy, which provides automatic HTTPS.
+4. `docker compose -f docker-compose.prod.yml exec -e SETUP_ADMIN_EMAIL=you@company.com -e SETUP_ADMIN_NAME="Your Name" -e SETUP_ADMIN_PASSWORD='…' app npm run setup:live` creates your agency and super-admin account. No demo data is created.
+5. Sign in, open **Settings → Go live** and finish anything still marked *Not configured*. That page lists each integration with its cheapest option, its cost and setup steps.
+
+In live mode nothing is ever mocked. If an integration is missing, the jobs that need it stop and one alert links to **Settings → Go live**.
+
+### Report downloads
+
+You can download any report as **PDF** or **CSV**. You can also build a new one for **the last 7/30/90 days, this month, last month or a custom date range** from:
+* Reports
+* Client → Reports
+* Client portal → Reports
+
+Each report compares the chosen period with the previous period of the same length.
 
 ### Live vs Demo mode
 

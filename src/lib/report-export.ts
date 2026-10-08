@@ -4,7 +4,7 @@ import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf
 import type { Report } from "@prisma/client";
 import { db } from "./db";
 import { BRAND } from "./brand";
-import { addDays, startOfDay } from "./utils";
+import { addDays } from "./utils";
 
 export type RangePreset = "7d" | "30d" | "90d" | "this_month" | "last_month" | "custom";
 
@@ -14,14 +14,14 @@ export function resolveRange(preset: string | null, from?: string | null, to?: s
   switch (preset) {
     case "7d": return { start: addDays(now, -7), end: now, label: "Last 7 days" };
     case "90d": return { start: addDays(now, -90), end: now, label: "Last 90 days" };
-    case "this_month": return { start: new Date(now.getFullYear(), now.getMonth(), 1), end: now, label: "This month" };
-    case "last_month": return { start: new Date(now.getFullYear(), now.getMonth() - 1, 1), end: new Date(now.getFullYear(), now.getMonth(), 1), label: "Last month" };
+    case "this_month": return { start: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)), end: now, label: "This month" };
+    case "last_month": return { start: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)), end: new Date(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).getTime() - 1), label: "Last month" };
     case "custom": {
-      const s = from ? new Date(`${from}T00:00:00`) : null;
-      const e = to ? addDays(new Date(`${to}T00:00:00`), 1) : null; // inclusive end date
+      const s = from ? new Date(`${from}T00:00:00Z`) : null;
+      const e = to ? new Date(addDays(new Date(`${to}T00:00:00Z`), 1).getTime() - 1) : null; // inclusive end date (23:59:59.999)
       if (!s || !e || Number.isNaN(s.getTime()) || Number.isNaN(e.getTime()) || s >= e) throw new Error("Choose a valid From and To date");
       if (e.getTime() - s.getTime() > 400 * 86_400_000) throw new Error("Maximum range is 400 days");
-      return { start: startOfDay(s), end: e > now ? now : e, label: `${from} to ${to}` };
+      return { start: s, end: e > now ? now : e, label: `${from} to ${to}` };
     }
     default: return { start: addDays(now, -30), end: now, label: "Last 30 days" };
   }
@@ -178,9 +178,11 @@ export async function reportPdf(report: Report, clientName: string, brandName: s
       ...(d.grid ? [[`Google Maps avg position ("${d.grid.keyword}")`, d.grid.avg?.toFixed(1) ?? "-", d.grid.prevAvg != null ? `was ${d.grid.prevAvg.toFixed(1)}` : "-"]] : []),
     ], [260, 90, 149]);
     heading("What improved");
-    para(d.rankings.improved.length ? d.rankings.improved.slice(0, 12).map((k) => `- Ranking for "${k}"`).join("   ") : "Rankings held steady.");
+    if (d.rankings.improved.length) for (const k of d.rankings.improved.slice(0, 12)) para(`- Ranking for "${k}"`);
+    else para("Rankings held steady.");
     heading("What declined");
-    para(d.rankings.declined.length ? d.rankings.declined.slice(0, 12).map((k) => `- Ranking for "${k}"`).join("   ") : "Nothing significant.");
+    if (d.rankings.declined.length) for (const k of d.rankings.declined.slice(0, 12)) para(`- Ranking for "${k}"`);
+    else para("Nothing significant.");
     if (d.attention.openHighIssues) {
       heading("What needs attention");
       para(`${d.attention.openHighIssues} important website improvements are queued or awaiting approval.`);
